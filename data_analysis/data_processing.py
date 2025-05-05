@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.decomposition import PCA
 
 # region classes -------------------------------------------------------------------------------------------------------------------------------
 class TenSecWindow:
@@ -76,8 +77,6 @@ class ThirtySecWindow:
 # (TODO: create feature vectors, later)
 # TODO: make yielding faster
 # TODO: Feature-Reduktion (PCA und Clustering)
-# TODO: see if other hosts have similar heat maps
-# TODO: setup Git
 
 def show_s1_features(window : ThirtySecWindow):
     print(window.s1.columns)
@@ -167,15 +166,7 @@ def plot_correlation_heatmap(thirty_sec_window : ThirtySecWindow):
 
                 # build DataFrame from collected features
                 df = pd.DataFrame(feature_series)
-                #print(df.info())
-                # if host_index is 0:
-                #     print(feature_series["conn_duration"])
-
-                # compute pairwise correlations
                 corr = df.corr(method='pearson')
-                #if(host_index == 3):
-                    #print(corr.info())
-                #print(corr)
                 all_cors.append(corr)
             else:
                 print("Not enough 10s-Windows to compute correlation, skipping!")
@@ -206,69 +197,75 @@ def plot_correlation_heatmap(thirty_sec_window : ThirtySecWindow):
         else:
             print(f"No correlation data for host {host_index + 1}!")
 
-        # filter and print variances and correlations
-        #print(f"\n--- Variance and Averaged Correlations ---")
-        #for i in range(len(features)):
-
-            # upper triangle, avoid self-correlation and duplicates
-            #for j in range(i + 1, len(features)):
-                #mean_corr = mean_corr_df.iat[i, j]
-                #var_corr = var_df.iat[i, j]
-
-                #if abs(mean_corr) > 0.8 and var_corr > 0.1:
-                    #print(f"{features[i]} ↔ {features[j]} → {var_corr:.2f} | {mean_corr:.2f}")
-
         #break
 
 def get_s1_features(path : Path):
     return pd.read_csv(path / 's1_general_qs.csv')
 
-def get_s2_features(path : Path):
-    df = pd.DataFrame()
+def get_s2_features_per_host(path : Path):
+    df_list = []
 
     # iterate through hosts and acquire respective s2s
     for entry in os.listdir(path):
+        df = pd.DataFrame()
         entry_path = path / entry
 
         if entry_path.is_dir():
             row = pd.read_csv(entry_path / 's2_selected_qs.csv')
             df = pd.concat([df, row], ignore_index=True)
+        
+        df_list.append(df)
 
-    return df
+    return df_list
 
-def get_s3_features(path : Path):
-    df = pd.DataFrame()
+def get_s3_features_per_host(path : Path):
+    df_list = []
 
     # iterate through hosts and acquire respective s3s
     for entry in os.listdir(path):
+        df = pd.DataFrame()
         entry_path = path / entry
 
         if entry_path.is_dir():
             row = pd.read_csv(entry_path / 's3_connection_qs.csv')
             df = pd.concat([df, row], ignore_index=True)
 
-    return df
+        df_list.append(df)
 
-def get_connection_features(path : Path):
-    df = pd.DataFrame()
+    return df_list
+
+def get_connection_features_per_host(path : Path):
+    host_dict = {}
 
     # iterate over hosts
     for entry in os.listdir(path):
+        connection_dict = {}
         entry_path = path / entry
 
         if entry_path.is_dir():
             connections_path = entry_path / 'connections'
+            ten_seconds_window_dict = {}
 
             # iterate over connections
             for connection in os.listdir(connections_path):
                 connection_path = connections_path / connection
 
                 # iterate over ten second windows and acquire connection features
+                df = pd.DataFrame()
                 for c_entry in os.listdir(connection_path):
                     connection_feature = pd.read_csv(connection_path / c_entry / 'host_data_chunk_full.csv')
                     df = pd.concat([df, connection_feature])
-    
-    return df
+                
+                # keep only columns starting from 'conn_duration'
+                idx = df.columns.get_loc('conn_duration')
+                df = df.iloc[:, idx:]
+            
+                connection_dict[connection] = df
+
+            # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
+            host_dict[entry] = connection_dict
+
+    return host_dict
 
 # dummy
 def feed_to_model(df : pd.DataFrame):
@@ -279,4 +276,10 @@ def load_windows_one_by_one(data_path : Path):
     # yield one feature df by one, instead of returning one huge aggregated df
     for window in os.listdir(data_path):
         window_path = data_path / window
-        yield get_connection_features(window_path)
+        yield get_connection_features_per_host(window_path)
+
+def get_reduced_feature_df(df):
+    pca = PCA(n_components=0.95)
+
+    return pd.DataFrame(pca.fit_transform(df))
+
