@@ -76,7 +76,8 @@ class ThirtySecWindow:
 
 # (TODO: create feature vectors, later)
 # TODO: make yielding faster
-# TODO: Feature-Reduktion (PCA und Clustering)
+# TODO: Feature-Reduktion (Clustering)
+# TODO: PCA: create data structure to contain reductions for all hosts and connections of a 30s window
 
 def show_s1_features(window : ThirtySecWindow):
     print(window.s1.columns)
@@ -234,7 +235,7 @@ def get_s3_features_per_host(path : Path):
 
     return df_list
 
-def get_connection_features_per_host(path : Path):
+def get_connection_features_per_host(path : Path, get_reduced : bool):
     host_dict = {}
 
     # iterate over hosts
@@ -244,26 +245,34 @@ def get_connection_features_per_host(path : Path):
 
         if entry_path.is_dir():
             connections_path = entry_path / 'connections'
-            ten_seconds_window_dict = {}
 
             # iterate over connections
             for connection in os.listdir(connections_path):
                 connection_path = connections_path / connection
 
                 # iterate over ten second windows and acquire connection features
-                df = pd.DataFrame()
-                for c_entry in os.listdir(connection_path):
-                    connection_feature = pd.read_csv(connection_path / c_entry / 'host_data_chunk_full.csv')
-                    df = pd.concat([df, connection_feature])
+                if len(os.listdir(connection_path)) > 1:
+                    df = pd.DataFrame()
+                    for c_entry in os.listdir(connection_path):
+                        connection_feature = pd.read_csv(connection_path / c_entry / 'host_data_chunk_full.csv')
+                        df = pd.concat([df, connection_feature])
+                    
+                    # keep only columns starting from 'conn_duration'
+                    idx = df.columns.get_loc('conn_duration')
+                    df = df.iloc[:, idx:]
                 
-                # keep only columns starting from 'conn_duration'
-                idx = df.columns.get_loc('conn_duration')
-                df = df.iloc[:, idx:]
-            
-                connection_dict[connection] = df
+                    # get features directly or in reduced form
+                    if get_reduced:
+                        df.dropna(axis=1, inplace=True)
+                        df = df.loc[:, df.dtypes != bool]
+                        connection_dict[connection] = get_reduced_feature_df(df)
+                    else:
+                        connection_dict[connection] = df
 
-            # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
-            host_dict[entry] = connection_dict
+                    # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
+                    host_dict[entry] = connection_dict
+                else:
+                    print("Not enough 10s windows to compute reduced features, skipping!")
 
     return host_dict
 
