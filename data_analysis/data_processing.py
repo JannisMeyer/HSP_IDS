@@ -5,6 +5,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+from scipy.spatial.distance import squareform
 
 # (TODO: create feature vectors, later)
 # TODO: make yielding faster
@@ -82,7 +84,7 @@ class ThirtySecWindow:
 
 # region data plotting -----------------------------------------------------------------------------------------------------------------------
 
-def plot_correlation(thirty_sec_window : ThirtySecWindow):
+def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool):
     
     USEFUL_FEATURES_START = 'conn_duration'
 
@@ -123,7 +125,7 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow):
 
             # compute the mean and variance over the z-axis
             mean_corr_matrix = np.mean(stacked, axis=0)
-            var_matrix = np.var(stacked, axis=0)
+            #var_matrix = np.var(stacked, axis=0)
 
             # retrieve labels
             features = all_cors[0].columns
@@ -132,14 +134,31 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow):
             mean_corr_df = pd.DataFrame(mean_corr_matrix, index=features, columns=features)
             #var_df = pd.DataFrame(var_matrix, index=features, columns=features)
 
-            # create heatmap
+            # create plot
             mean_corr_df_na_dropped = mean_corr_df.corr().dropna(how="all").dropna(axis=1, how="all")
 
-            plt.figure(figsize=(20, 20))
-            sns.heatmap(mean_corr_df_na_dropped, annot=False, fmt=".2f", cmap="coolwarm", center=0)
-            plt.title("Feature Correlation Heatmap")
-            plt.tight_layout()
-            plt.show()
+            if plot_dendrogram:
+
+                # compute hierarchical clusters
+                distance_matrix = 1 - mean_corr_df_na_dropped
+                distance_matrix = np.clip(distance_matrix, a_min=0, a_max=100) # clip negative values
+                condensed_distance_vector = squareform(distance_matrix.values)
+                Z = linkage(condensed_distance_vector, method='average') # performs hierarchical clustering
+
+                # plot dendrogram
+                plt.figure(figsize=(10, 5))
+                dendrogram(Z, labels=mean_corr_df_na_dropped.columns.tolist(), leaf_rotation=90)
+                plt.title("Feature Clustering Dendrogram")
+                plt.show()
+
+            else:
+
+                # plot heat map
+                plt.figure(figsize=(20, 20))
+                sns.heatmap(mean_corr_df_na_dropped, annot=False, fmt=".2f", cmap="coolwarm", center=0)
+                plt.title("Feature Correlation Heatmap")
+                plt.tight_layout()
+                plt.show()
         else:
             print(f"No correlation data for host {host_index + 1}!")
 
@@ -241,5 +260,5 @@ def load_windows_one_by_one(data_path : Path):
     # yield one feature df by one, instead of returning one huge aggregated df
     for window in os.listdir(data_path):
         window_path = data_path / window
-        yield get_connection_features_per_host(window_path)
+        yield get_connection_features(window_path)
 
