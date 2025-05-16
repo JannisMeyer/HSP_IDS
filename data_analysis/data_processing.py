@@ -6,7 +6,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
 
+# (TODO: create feature vectors, later)
+# TODO: make yielding faster
+# TODO: Feature-Reduktion (Clustering)
+# TODO: PCA: create data structure to contain reductions for all hosts and connections of a 30s window
+# TODO: Notizen für Projekt-Bericht anfangen
+
 # region classes -------------------------------------------------------------------------------------------------------------------------------
+
 class TenSecWindow:
     def __init__(self, path : Path):
         self.data = self.getData(path / 'host_data_chunk_full.csv')
@@ -71,13 +78,9 @@ class ThirtySecWindow:
                 hosts.append(Host(entry_path))
 
         return hosts
+    
 
-# region data analysis functions --------------------------------------------------------------------------------------------------------------
-
-# (TODO: create feature vectors, later)
-# TODO: make yielding faster
-# TODO: Feature-Reduktion (Clustering)
-# TODO: PCA: create data structure to contain reductions for all hosts and connections of a 30s window
+# region data plotting -----------------------------------------------------------------------------------------------------------------------
 
 def show_s1_features(window : ThirtySecWindow):
     print(window.s1.columns)
@@ -136,7 +139,8 @@ def plot_s3_feature(window : ThirtySecWindow, feature : str):
     plt.tight_layout()
     plt.show()
 
-def plot_correlation_heatmap(thirty_sec_window : ThirtySecWindow):
+
+def plot_correlation(thirty_sec_window : ThirtySecWindow):
     
     USEFUL_FEATURES_START = 'conn_duration'
 
@@ -145,8 +149,7 @@ def plot_correlation_heatmap(thirty_sec_window : ThirtySecWindow):
 
         all_cors = []
         
-        for conn_index, connection in enumerate(host.connections):
-            #print(f"\n--- Connection {conn_index + 1} ---")
+        for connection in host.connections:
             feature_series = {}
 
             if connection.tenSecWindows.__len__() > 1:
@@ -185,7 +188,7 @@ def plot_correlation_heatmap(thirty_sec_window : ThirtySecWindow):
 
             # wrap back into DataFrames
             mean_corr_df = pd.DataFrame(mean_corr_matrix, index=features, columns=features)
-            var_df = pd.DataFrame(var_matrix, index=features, columns=features)
+            #var_df = pd.DataFrame(var_matrix, index=features, columns=features)
 
             # create heatmap
             mean_corr_df_na_dropped = mean_corr_df.corr().dropna(how="all").dropna(axis=1, how="all")
@@ -200,10 +203,13 @@ def plot_correlation_heatmap(thirty_sec_window : ThirtySecWindow):
 
         #break
 
-def get_s1_features(path : Path):
+
+# region data acquiring -----------------------------------------------------------------------------------------------------------------------
+
+def get_s1_features(path : Path): # use path for multi 30s window analysis
     return pd.read_csv(path / 's1_general_qs.csv')
 
-def get_s2_features_per_host(path : Path):
+def get_s2_features_per_host(path : Path): # use path for multi 30s window analysis
     df_list = []
 
     # iterate through hosts and acquire respective s2s
@@ -219,7 +225,7 @@ def get_s2_features_per_host(path : Path):
 
     return df_list
 
-def get_s3_features_per_host(path : Path):
+def get_s3_features_per_host(path : Path): # use path for multi 30s window analysis
     df_list = []
 
     # iterate through hosts and acquire respective s3s
@@ -235,46 +241,54 @@ def get_s3_features_per_host(path : Path):
 
     return df_list
 
-def get_connection_features_per_host(path : Path, get_reduced : bool):
+def get_connection_features_per_host(thirtySecondWindow : ThirtySecWindow, get_reduced : bool):
     host_dict = {}
 
     # iterate over hosts
-    for entry in os.listdir(path):
+    for host in thirtySecondWindow.hosts:
         connection_dict = {}
-        entry_path = path / entry
 
-        if entry_path.is_dir():
-            connections_path = entry_path / 'connections'
+        # iterate over connections
+        for connection in host.connections:
 
-            # iterate over connections
-            for connection in os.listdir(connections_path):
-                connection_path = connections_path / connection
-
-                # iterate over ten second windows and acquire connection features
-                if len(os.listdir(connection_path)) > 1:
-                    df = pd.DataFrame()
-                    for c_entry in os.listdir(connection_path):
-                        connection_feature = pd.read_csv(connection_path / c_entry / 'host_data_chunk_full.csv')
-                        df = pd.concat([df, connection_feature])
-                    
-                    # keep only columns starting from 'conn_duration'
-                    idx = df.columns.get_loc('conn_duration')
-                    df = df.iloc[:, idx:]
+            # iterate over ten second windows and acquire connection features
+            if len(connection.tenSecWindows) > 1:
+                df = pd.DataFrame()
                 
-                    # get features directly or in reduced form
-                    if get_reduced:
-                        df.dropna(axis=1, inplace=True)
-                        df = df.loc[:, df.dtypes != bool]
-                        connection_dict[connection] = get_reduced_feature_df(df)
-                    else:
-                        connection_dict[connection] = df
-
-                    # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
-                    host_dict[entry] = connection_dict
+                for tenSecondWindow in connection.tenSecWindows:
+                    df = pd.concat([df, tenSecondWindow.data])
+                
+                # keep only columns starting from 'conn_duration'
+                idx = df.columns.get_loc('conn_duration')
+                df = df.iloc[:, idx:]
+            
+                # get features directly or in reduced form
+                if get_reduced:
+                    df.dropna(axis=1, inplace=True)
+                    df = df.loc[:, df.dtypes != bool]
+                    connection_dict[connection] = get_reduced_feature_df(df)
                 else:
-                    print("Not enough 10s windows to compute reduced features, skipping!")
+                    connection_dict[connection] = df
+
+                # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
+                host_dict[host] = connection_dict
+            else:
+                print("Not enough 10s windows to compute reduced features, skipping!")
 
     return host_dict
+
+def get_reduced_feature_df(df):
+    # TODO: clustering, mit mehr oder weniger Dimensionen, dann plotten, evtl. skalieren
+    # TODO: 30s-Fenster vergleichen hinsichtlich s1, s2, s3, aber erst von unten, Connections, Hosts, 30s-Fenster
+    # Fragen: Sieht man Unterschiede im Cluster zwischen verschiedenen Angriffen?
+    #         Werden die Cluster besser, wenn man erst PCA macht?
+    #         Kann man die Korrelationen irgendwie aufbrechen?
+    pca = PCA(n_components=0.95)
+
+    return pd.DataFrame(pca.fit_transform(df))
+
+
+# region auxiliary ----------------------------------------------------------------------------------------------------------------------------
 
 # dummy
 def feed_to_model(df : pd.DataFrame):
@@ -286,9 +300,4 @@ def load_windows_one_by_one(data_path : Path):
     for window in os.listdir(data_path):
         window_path = data_path / window
         yield get_connection_features_per_host(window_path)
-
-def get_reduced_feature_df(df):
-    pca = PCA(n_components=0.95)
-
-    return pd.DataFrame(pca.fit_transform(df))
 
