@@ -82,64 +82,6 @@ class ThirtySecWindow:
 
 # region data plotting -----------------------------------------------------------------------------------------------------------------------
 
-def show_s1_features(window : ThirtySecWindow):
-    print(window.s1.columns)
-
-def show_s2_features(window : ThirtySecWindow):
-    print(window.hosts[0].s2.columns)
-
-def show_s3_features(window : ThirtySecWindow):
-    print(window.hosts[0].s3.columns)
-
-def plot_s2_feature(window : ThirtySecWindow, feature : str):
-
-    # collect data
-    x_labels = []
-    y_values = []
-
-    for i, host in enumerate(window.hosts):
-        try:
-            value = host.s2[feature].iloc[0]  # get an element instead of the whole column
-            x_labels.append(f'host{i+1}')
-            y_values.append(value)
-        except KeyError:
-            print(f"'{feature}' not found in s2 of host{i+1}")
-        except Exception as e:
-            print(f"Error processing host{i+1}: {e}")
-
-    # plot
-    plt.figure(figsize=(10, 6))
-    plt.bar(x_labels, y_values)
-    plt.title(f'{feature} per Host (from s2)')
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-def plot_s3_feature(window : ThirtySecWindow, feature : str):
-
-    # collect data
-    x_labels = []
-    y_values = []
-
-    for i, host in enumerate(window.hosts):
-        try:
-            value = host.s3[feature].iloc[0]  # get an element instead of the whole column
-            x_labels.append(f'host{i+1}')
-            y_values.append(value)
-        except KeyError:
-            print(f"'{feature}' not found in s3 of host{i+1}")
-        except Exception as e:
-            print(f"Error processing host{i+1}: {e}")
-
-    # plot
-    plt.figure(figsize=(10, 6))
-    plt.bar(x_labels, y_values)
-    plt.title(f'{feature} per Host (from s3)')
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-
 def plot_correlation(thirty_sec_window : ThirtySecWindow):
     
     USEFUL_FEATURES_START = 'conn_duration'
@@ -209,7 +151,7 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow):
 def get_s1_features(path : Path): # use path for multi 30s window analysis
     return pd.read_csv(path / 's1_general_qs.csv')
 
-def get_s2_features_per_host(path : Path): # use path for multi 30s window analysis
+def get_s2_features(path : Path): # use path for multi 30s window analysis
     df_list = []
 
     # iterate through hosts and acquire respective s2s
@@ -225,7 +167,7 @@ def get_s2_features_per_host(path : Path): # use path for multi 30s window analy
 
     return df_list
 
-def get_s3_features_per_host(path : Path): # use path for multi 30s window analysis
+def get_s3_features(path : Path): # use path for multi 30s window analysis
     df_list = []
 
     # iterate through hosts and acquire respective s3s
@@ -241,7 +183,7 @@ def get_s3_features_per_host(path : Path): # use path for multi 30s window analy
 
     return df_list
 
-def get_connection_features_per_host(thirtySecondWindow : ThirtySecWindow, get_reduced : bool):
+def get_connection_features(thirtySecondWindow : ThirtySecWindow, get_reduced : bool):
     host_dict = {}
 
     # iterate over hosts
@@ -277,7 +219,7 @@ def get_connection_features_per_host(thirtySecondWindow : ThirtySecWindow, get_r
 
     return host_dict
 
-def get_reduced_feature_df(df):
+def get_reduced_features(df):
     # TODO: clustering, mit mehr oder weniger Dimensionen, dann plotten, evtl. skalieren
     # TODO: 30s-Fenster vergleichen hinsichtlich s1, s2, s3, aber erst von unten, Connections, Hosts, 30s-Fenster
     # Fragen: Sieht man Unterschiede im Cluster zwischen verschiedenen Angriffen?
