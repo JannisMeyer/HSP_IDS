@@ -7,35 +7,34 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
 from scipy.spatial.distance import squareform
+from tslearn.clustering import TimeSeriesKMeans
+from tslearn.datasets import CachedDatasets
+from tslearn.preprocessing import TimeSeriesScalerMeanVariance
 
-# (TODO: create feature vectors, later)
-# TODO: make yielding faster
-# TODO: Feature-Reduktion (Clustering)
-# TODO: PCA: create data structure to contain reductions for all hosts and connections of a 30s window
-# TODO: Notizen für Projekt-Bericht anfangen
+# TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
 
 # region classes -------------------------------------------------------------------------------------------------------------------------------
 
 class TenSecWindow:
     def __init__(self, path : Path):
-        self.data = self.getData(path / 'host_data_chunk_full.csv')
+        self.data = self.get_data(path / 'host_data_chunk_full.csv')
 
-    def getData(self, data_path):
+    def get_data(self, data_path):
         return pd.read_csv(data_path)
 
 class Connection:
     def __init__(self, path : Path):
-        self.tenSecWindows = self.getTenSecWindows(path)
+        self.ten_sec_windows = self.getTenSecWindows(path)
 
     def getTenSecWindows(self, path):
-        tenSecWindows : list[TenSecWindow] = [] # imply data type so list is iterable and doesn't recall the get-method
+        ten_sec_windows : list[TenSecWindow] = [] # imply data type so list is iterable and doesn't recall the get-method
 
         for entry in os.listdir(path):
             entry_path = path / entry
             if entry_path.is_dir():
-                tenSecWindows.append(TenSecWindow(entry_path))
+                ten_sec_windows.append(TenSecWindow(entry_path))
 
-        return tenSecWindows
+        return ten_sec_windows
 
 class Host:
     def __init__(self, path : Path):
@@ -83,10 +82,9 @@ class ThirtySecWindow:
     
 
 # region data plotting -----------------------------------------------------------------------------------------------------------------------
+USEFUL_FEATURES_START = 'conn_duration'
 
 def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool):
-    
-    USEFUL_FEATURES_START = 'conn_duration'
 
     for host_index, host in enumerate(thirty_sec_window.hosts):
         print(f"\n----- Host {host_index + 1} -----")
@@ -96,8 +94,8 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool
         for connection in host.connections:
             feature_series = {}
 
-            if connection.tenSecWindows.__len__() > 1:
-                for ten_sec_window in connection.tenSecWindows:
+            if connection.ten_sec_windows.__len__() > 1:
+                for ten_sec_window in connection.ten_sec_windows:
                     
                     # on first run, determine which columns to use
                     if not feature_series:
@@ -163,6 +161,46 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool
             print(f"No correlation data for host {host_index + 1}!")
 
         #break
+    
+def time_series_kmeans(thirty_second_window : ThirtySecWindow):
+    connection_dict = {}
+
+    for host in thirty_second_window.hosts:
+        samples = []
+
+        # acquire connection features
+        for connection in host.connections:
+            if len(connection.ten_sec_windows) == 4:
+                sample = []
+
+                # cut useless features
+                columns = connection.ten_sec_windows[0].data.columns
+                start_idx = columns.get_loc(USEFUL_FEATURES_START)
+                
+                # acquire usefull features
+                for ten_second_window in connection.ten_sec_windows:
+                    row = ten_second_window.data.values[0]
+                    useful_values = row[start_idx:]
+                    sample.append(useful_values)
+
+                sample = np.array(sample)
+                samples.append(sample)
+
+        # disregard empty samples
+        if len(samples) > 0:
+
+            # fit samples
+            X = np.array(samples)
+            X_scaled = TimeSeriesScalerMeanVariance().fit_transform(X)
+
+            # compute cluster
+            model = TimeSeriesKMeans(n_clusters=3, metric="euclidean", random_state=0)
+            labels = model.fit_predict(X_scaled)
+
+            print(labels)
+        else:
+            print("No samples to cluster for this host!")
+        #break
 
 
 # region data acquiring -----------------------------------------------------------------------------------------------------------------------
@@ -202,22 +240,22 @@ def get_s3_features(path : Path): # use path for multi 30s window analysis
 
     return df_list
 
-def get_connection_features(thirtySecondWindow : ThirtySecWindow, get_reduced : bool):
+def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced : bool):
     host_dict = {}
 
     # iterate over hosts
-    for host in thirtySecondWindow.hosts:
+    for host in thirty_second_window.hosts:
         connection_dict = {}
 
         # iterate over connections
         for connection in host.connections:
 
             # iterate over ten second windows and acquire connection features
-            if len(connection.tenSecWindows) > 1:
+            if len(connection.ten_sec_windows) > 1:
                 df = pd.DataFrame()
                 
-                for tenSecondWindow in connection.tenSecWindows:
-                    df = pd.concat([df, tenSecondWindow.data])
+                for ten_second_window in connection.ten_sec_windows:
+                    df = pd.concat([df, ten_second_window.data])
                 
                 # keep only columns starting from 'conn_duration'
                 idx = df.columns.get_loc('conn_duration')
@@ -227,14 +265,15 @@ def get_connection_features(thirtySecondWindow : ThirtySecWindow, get_reduced : 
                 if get_reduced:
                     df.dropna(axis=1, inplace=True)
                     df = df.loc[:, df.dtypes != bool]
-                    connection_dict[connection] = get_reduced_feature_df(df)
+                    connection_dict[connection] = get_reduced_features(df)
                 else:
                     connection_dict[connection] = df
 
                 # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
                 host_dict[host] = connection_dict
             else:
-                print("Not enough 10s windows to compute reduced features, skipping!")
+                #print("Not enough 10s windows to compute reduced features, skipping!")
+                pass
 
     return host_dict
 
