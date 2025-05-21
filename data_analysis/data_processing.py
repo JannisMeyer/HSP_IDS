@@ -176,53 +176,57 @@ def time_series_kmeans(thirty_second_window : ThirtySecWindow):
         print(f"\n----- Host {host.s2['sq_identifier'][0]} -----")
         samples = []
 
-        # acquire connection features
-        for connection in host.connections:
-            if len(connection.ten_sec_windows) == 5:
-                sample = []
-                averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
-
-                # cut useless features
-                columns = connection.ten_sec_windows[0].data.columns
-                start_idx = columns.get_loc(USEFUL_FEATURES_START)
-                
-                for ten_second_window in connection.ten_sec_windows:
-                    row = ten_second_window.data
-
-                    # fill NaNs with averaged values
-                    row = row.fillna(averaged_tensecwindow_df_.iloc[0])
-
-                    # acquire usefull features
-                    row = row.values[0]
-                    useful_values = row[start_idx:]
-                    sample.append(useful_values)
-
-                # convert to np.array and remove NaNs
-                sample = np.array(sample, dtype=float)
-                sample = sample[~np.isnan(sample)]
-                samples.append(sample)
-                print(sample.shape)
+        most_common_tensecwindow_count_ = most_common_tensecwindow_count(host)
+        print(f"Most common 10s window count is {most_common_tensecwindow_count_}, using that for clustering")
         
-        # -> have np.array with shape (n_connections, n_tensecwindows, n_features)
-        # -> every connection will be assigned to a cluster
+        if most_common_tensecwindow_count_ > 1:
+            for connection in host.connections:
+                if len(connection.ten_sec_windows) == most_common_tensecwindow_count_:
+                    sample = []
+                    averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
 
-        # disregard empty samples
-        if len(samples) > 0:
+                    # cut useless features
+                    columns = connection.ten_sec_windows[0].data.columns
+                    start_idx = columns.get_loc(USEFUL_FEATURES_START)
+                    
+                    for ten_second_window in connection.ten_sec_windows:
+                        row = ten_second_window.data
 
-            # fit samples
-            #print((len(samples), len(samples[0])))
-            X = np.array(samples)
-            X_scaled = TimeSeriesScalerMeanVariance().fit_transform(X)
+                        # fill NaNs with averaged values
+                        row = row.fillna(averaged_tensecwindow_df_.iloc[0])
 
-            # compute cluster
-            model = TimeSeriesKMeans(n_clusters=2, metric="euclidean", random_state=0)
-            labels = model.fit_predict(X_scaled)
+                        # acquire usefull features
+                        row = row.values[0]
+                        useful_values = row[start_idx:]
+                        sample.append(useful_values)
 
-            print("Inertia: "+str(model.inertia_))
-            print(labels)
+                    # convert to np.array and remove NaNs
+                    sample = np.array(sample, dtype=float)
+                    sample = sample[~np.isnan(sample)]
+                    samples.append(sample)
+            
+            # -> have np.array with shape (n_connections, n_tensecwindows, n_features)
+            # -> every connection will be assigned to a cluster
+
+            # disregard empty samples
+            if len(samples) > 0:
+
+                # fit samples
+                X = np.array(samples)
+                X_scaled = TimeSeriesScalerMeanVariance().fit_transform(X)
+
+                # compute cluster
+                model = TimeSeriesKMeans(n_clusters=3, metric="euclidean", random_state=0)
+                labels = model.fit_predict(X_scaled)
+
+                print("Inertia: "+str(model.inertia_))
+                print(labels)
+            else:
+                print("No samples to cluster for this host!")
+            #break
         else:
-            print("No samples to cluster for this host!")
-        #break
+            print("Not enough 10s windows to compute clustering, skipping!")
+            #break
 
 
 # region data acquiring -----------------------------------------------------------------------------------------------------------------------
@@ -325,20 +329,20 @@ def load_windows_one_by_one(data_path : Path):
 
 def most_common_tensecwindow_count(host : Host):
     counts = [len(conn.ten_sec_windows) for conn in host.connections]
+
     if not counts:
         return None
+    
     return max(set(counts), key=counts.count)
 
 def averaged_tensecwindow_df(connection: Connection):
 
-    # Collect all dataframes
+    # collect all dfs
     dfs = [tsw.data for tsw in connection.ten_sec_windows]
 
     if not dfs:
-        # Return a DataFrame of zeros if there are no windows
         return pd.DataFrame([0], columns=[])
-    
-    # Concatenate into one DataFrame
+
     df_all = pd.concat(dfs, ignore_index=True)
 
     # remove useless features
@@ -346,12 +350,11 @@ def averaged_tensecwindow_df(connection: Connection):
     start_idx = columns.get_loc(USEFUL_FEATURES_START)
     df_all = df_all[start_idx:]
     
-    # Compute mean, skipping NaNs
+    # compute mean
     avg = df_all.mean(axis=0, skipna=True)
     
-    # Replace NaN means (all values were NaN) with 0
+    # replace NaN means with 0 if all values are NaN
     avg_filled = avg.fillna(0)
     
-    # Return as a single-row DataFrame (like TenSecWindow.data)
     return pd.DataFrame([avg_filled])
 
