@@ -20,7 +20,13 @@ class TenSecWindow:
         self.data = self.get_data(path / 'host_data_chunk_full.csv')
 
     def get_data(self, data_path):
-        return pd.read_csv(data_path)
+        df = pd.read_csv(data_path)
+
+        # convert bools to floats
+        bool_cols = df.select_dtypes(include='bool').columns
+        df[bool_cols] = df[bool_cols].astype(float)
+
+        return df   
 
 class Connection:
     def __init__(self, path : Path):
@@ -161,42 +167,58 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool
             print(f"No correlation data for host {host_index + 1}!")
 
         #break
-    
+
+# TODO: test this on real datasets
 def time_series_kmeans(thirty_second_window : ThirtySecWindow):
-    connection_dict = {}
 
     for host in thirty_second_window.hosts:
+
+        print(f"\n----- Host {host.s2['sq_identifier'][0]} -----")
         samples = []
 
         # acquire connection features
         for connection in host.connections:
-            if len(connection.ten_sec_windows) == 4:
+            if len(connection.ten_sec_windows) == 5:
                 sample = []
+                averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
 
                 # cut useless features
                 columns = connection.ten_sec_windows[0].data.columns
                 start_idx = columns.get_loc(USEFUL_FEATURES_START)
                 
-                # acquire usefull features
                 for ten_second_window in connection.ten_sec_windows:
-                    row = ten_second_window.data.values[0]
+                    row = ten_second_window.data
+
+                    # fill NaNs with averaged values
+                    row = row.fillna(averaged_tensecwindow_df_.iloc[0])
+
+                    # acquire usefull features
+                    row = row.values[0]
                     useful_values = row[start_idx:]
                     sample.append(useful_values)
 
-                sample = np.array(sample)
+                # convert to np.array and remove NaNs
+                sample = np.array(sample, dtype=float)
+                sample = sample[~np.isnan(sample)]
                 samples.append(sample)
+                print(sample.shape)
+        
+        # -> have np.array with shape (n_connections, n_tensecwindows, n_features)
+        # -> every connection will be assigned to a cluster
 
         # disregard empty samples
         if len(samples) > 0:
 
             # fit samples
+            #print((len(samples), len(samples[0])))
             X = np.array(samples)
             X_scaled = TimeSeriesScalerMeanVariance().fit_transform(X)
 
             # compute cluster
-            model = TimeSeriesKMeans(n_clusters=3, metric="euclidean", random_state=0)
+            model = TimeSeriesKMeans(n_clusters=2, metric="euclidean", random_state=0)
             labels = model.fit_predict(X_scaled)
 
+            print("Inertia: "+str(model.inertia_))
             print(labels)
         else:
             print("No samples to cluster for this host!")
@@ -300,4 +322,36 @@ def load_windows_one_by_one(data_path : Path):
     for window in os.listdir(data_path):
         window_path = data_path / window
         yield get_connection_features(window_path)
+
+def most_common_tensecwindow_count(host : Host):
+    counts = [len(conn.ten_sec_windows) for conn in host.connections]
+    if not counts:
+        return None
+    return max(set(counts), key=counts.count)
+
+def averaged_tensecwindow_df(connection: Connection):
+
+    # Collect all dataframes
+    dfs = [tsw.data for tsw in connection.ten_sec_windows]
+
+    if not dfs:
+        # Return a DataFrame of zeros if there are no windows
+        return pd.DataFrame([0], columns=[])
+    
+    # Concatenate into one DataFrame
+    df_all = pd.concat(dfs, ignore_index=True)
+
+    # remove useless features
+    columns = df_all.columns
+    start_idx = columns.get_loc(USEFUL_FEATURES_START)
+    df_all = df_all[start_idx:]
+    
+    # Compute mean, skipping NaNs
+    avg = df_all.mean(axis=0, skipna=True)
+    
+    # Replace NaN means (all values were NaN) with 0
+    avg_filled = avg.fillna(0)
+    
+    # Return as a single-row DataFrame (like TenSecWindow.data)
+    return pd.DataFrame([avg_filled])
 
