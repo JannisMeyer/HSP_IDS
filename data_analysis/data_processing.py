@@ -90,6 +90,7 @@ class ThirtySecWindow:
 # region data plotting -----------------------------------------------------------------------------------------------------------------------
 USEFUL_FEATURES_START = 'conn_duration'
 
+# TODO: test this on real datasets
 def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool):
 
     for host_index, host in enumerate(thirty_sec_window.hosts):
@@ -168,18 +169,90 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool
 
         #break
 
+def connection_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int = 3):
+
+    for host in thirty_second_window.hosts:
+
+        print(f"\n----- Host {host.s2['sq_identifier'][0]} -----")
+
+        for id, connection in enumerate(host.connections):
+            print(f"----- Connection {id} -----")
+            features = []
+            columns = None
+
+            if len(connection.ten_sec_windows) > 1:
+                averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
+
+                # cut useless features
+                columns = connection.ten_sec_windows[0].data.columns
+                start_idx = columns.get_loc(USEFUL_FEATURES_START)
+                
+                for ten_second_window in connection.ten_sec_windows:
+                    row = ten_second_window.data
+
+                    # fill NaNs with averaged values
+                    row = row.fillna(averaged_tensecwindow_df_.iloc[0])
+
+                    # acquire usefull features
+                    row = row.values[0]
+                    useful_values = row[start_idx:]
+                    useful_values = np.array(useful_values, dtype=float).reshape(-1, 1)
+                    features.append(useful_values)
+
+                # convert to np.array and remove NaNs
+                features = np.array(features, dtype=float)
+
+                # rotate axes to have shape (n_features, n_tensecwindows, 1)
+                features = np.swapaxes(features, 0, 1) 
+
+                # -> have np.array with shape (n_features, n_tensecwindows, 1)
+                # -> every feature will be assigned to a cluster
+
+                # fit samples
+                features_scaled = TimeSeriesScalerMeanVariance().fit_transform(features)
+
+                # compute cluster
+                model = TimeSeriesKMeans(n_clusters=n_clusters, metric="euclidean", random_state=0)
+                labels = model.fit_predict(features_scaled)
+
+                print("Inertia: "+str(model.inertia_))
+
+                # create df for plotting
+                df = pd.DataFrame({
+                    'Feature': columns[start_idx:],
+                    'Cluster': labels
+                })
+
+                counts = df.value_counts('Cluster').reset_index(name='Count')
+
+                # plot bar chart for clusters
+                plt.figure(figsize=(6, 6))
+                plt.bar(counts['Cluster'].astype(str), counts['Count'], color='skyblue')
+                plt.ylabel('Count')
+                plt.title('Feature Clusters from KMeans')
+                plt.tight_layout()
+                plt.show()
+            else:
+                print("Not enough 10s windows to compute clustering, skipping!")
+                continue
+            break
+        break
+    
+
 # TODO: test this on real datasets
-def time_series_kmeans(thirty_second_window : ThirtySecWindow):
+# TODO: redo for a single connection with normal Kmeans, compare before and after PCA
+def time_series_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int = 3):
 
     for host in thirty_second_window.hosts:
 
         print(f"\n----- Host {host.s2['sq_identifier'][0]} -----")
         samples = []
 
+        # get most common 10s window count for maximum data availability
         most_common_tensecwindow_count_ = most_common_tensecwindow_count(host)
         print(f"Most common 10s window count is {most_common_tensecwindow_count_}, using that for clustering")
         
-        if most_common_tensecwindow_count_ > 1:
+        if most_common_tensecwindow_count_ > 1: # less than 2 is not applicable
             for connection in host.connections:
                 if len(connection.ten_sec_windows) == most_common_tensecwindow_count_:
                     sample = []
@@ -216,7 +289,7 @@ def time_series_kmeans(thirty_second_window : ThirtySecWindow):
                 X_scaled = TimeSeriesScalerMeanVariance().fit_transform(X)
 
                 # compute cluster
-                model = TimeSeriesKMeans(n_clusters=3, metric="euclidean", random_state=0)
+                model = TimeSeriesKMeans(n_clusters=n_clusters, metric="euclidean", random_state=0)
                 labels = model.fit_predict(X_scaled)
 
                 print("Inertia: "+str(model.inertia_))
