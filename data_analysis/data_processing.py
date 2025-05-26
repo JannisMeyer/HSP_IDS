@@ -241,6 +241,10 @@ def connection_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int =
 
 # TODO: test this on real datasets
 # TODO: redo for a single connection with normal Kmeans, compare before and after PCA
+# requirements txt (Anforderungsliste) erstellen für das Training und an Murad schicken
+# Welche Modelle bieten sich an für das Training?
+# Modellstruktur pitchen
+# host-weise
 def time_series_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int = 3):
 
     for host in thirty_second_window.hosts:

@@ -1,0 +1,11 @@
+numpy==1.26.2
+pandas==2.1.3
+pathlib==1.0.1
+matplot==0.1.9
+matplotlib==3.8.2
+matplotlib-inline==0.1.6
+seaborn==0.13.2
+scikit-learn==1.6.1
+scipy==1.15.2
+tslearn==0.6.3
+importlib-metadata==6.8.0
