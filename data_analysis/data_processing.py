@@ -7,6 +7,7 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
 from scipy.spatial.distance import squareform
+from sklearn.discriminant_analysis import StandardScaler
 from tslearn.clustering import TimeSeriesKMeans
 from tslearn.datasets import CachedDatasets
 from tslearn.preprocessing import TimeSeriesScalerMeanVariance
@@ -351,32 +352,45 @@ def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced 
         connection_dict = {}
 
         # iterate over connections
-        for connection in host.connections:
+        for i, connection in enumerate(host.connections):
+            print(f"---- Processing connection {i} ----")
 
             # iterate over ten second windows and acquire connection features
             if len(connection.ten_sec_windows) > 1:
                 df = pd.DataFrame()
+                averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
                 
                 for ten_second_window in connection.ten_sec_windows:
                     df = pd.concat([df, ten_second_window.data])
                 
                 # keep only columns starting from 'conn_duration'
-                idx = df.columns.get_loc('conn_duration')
+                idx = df.columns.get_loc(USEFUL_FEATURES_START)
                 df = df.iloc[:, idx:]
             
                 # get features directly or in reduced form
                 if get_reduced:
-                    df.dropna(axis=1, inplace=True)
-                    df = df.loc[:, df.dtypes != bool]
+
+                    # fill NaNs with averaged values
+                    df = df.fillna(averaged_tensecwindow_df_.iloc[0])
+
+                    # convert bools to floats
+                    bool_cols = df.select_dtypes(include='bool').columns
+                    df[bool_cols] = df[bool_cols].astype(float)
+                    #print(df)
+
+                    # reduce features using PCA
                     connection_dict[connection] = get_reduced_features(df)
+                    print(connection_dict[connection])
                 else:
                     connection_dict[connection] = df
 
                 # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
                 host_dict[host] = connection_dict
+                break
             else:
                 #print("Not enough 10s windows to compute reduced features, skipping!")
                 pass
+        break
 
     return host_dict
 
@@ -386,8 +400,13 @@ def get_reduced_features(df):
     # Fragen: Sieht man Unterschiede im Cluster zwischen verschiedenen Angriffen?
     #         Werden die Cluster besser, wenn man erst PCA macht?
     #         Kann man die Korrelationen irgendwie aufbrechen?
-    pca = PCA(n_components=0.95)
 
+    # scale data
+    scaler = StandardScaler()
+    df = scaler.fit_transform(df)
+
+    # reduce features using PCA
+    pca = PCA(n_components=0.95)
     return pd.DataFrame(pca.fit_transform(df))
 
 
