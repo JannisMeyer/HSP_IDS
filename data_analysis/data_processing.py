@@ -386,7 +386,7 @@ def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced 
 
                 # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
                 host_dict[host] = connection_dict
-                break
+                #break
             else:
                 #print("Not enough 10s windows to compute reduced features, skipping!")
                 pass
@@ -394,19 +394,15 @@ def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced 
 
     return host_dict
 
-def get_reduced_features(df):
-    # TODO: clustering, mit mehr oder weniger Dimensionen, dann plotten, evtl. skalieren
-    # TODO: 30s-Fenster vergleichen hinsichtlich s1, s2, s3, aber erst von unten, Connections, Hosts, 30s-Fenster
-    # Fragen: Sieht man Unterschiede im Cluster zwischen verschiedenen Angriffen?
-    #         Werden die Cluster besser, wenn man erst PCA macht?
-    #         Kann man die Korrelationen irgendwie aufbrechen?
+def get_reduced_features(df, n_components):
 
     # scale data
     scaler = StandardScaler()
     df = scaler.fit_transform(df)
 
     # reduce features using PCA
-    pca = PCA(n_components=0.95)
+    #pca = PCA(n_components=n_components)
+    pca = PCA(n_components=0.9)
     return pd.DataFrame(pca.fit_transform(df))
 
 
