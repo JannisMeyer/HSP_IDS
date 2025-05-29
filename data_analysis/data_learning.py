@@ -5,8 +5,7 @@ from . import data_processing as dp
 # -> do this k times and evaluate model
 # Grid Search for hyperparameter tuning
 
-def create_feature_vectors(thirtySecondWindow : dp.ThirtySecWindow, method : str = 'pca'):
-     main_df = dp.pd.DataFrame()
+def create_feature_vector(thirtySecondWindow : dp.ThirtySecWindow, method : str = 'pca'):
 
      # use PCA or autoencoder
      if method == 'pca': #TODO: include s1, s2, s3
@@ -69,10 +68,9 @@ def create_feature_vectors(thirtySecondWindow : dp.ThirtySecWindow, method : str
 
      elif method == 'autoencoder': # TODO: autoencoder
          # apply autoencoder to the data
-         return main_df
+         pass
      else:
          raise ValueError("Method must be either 'pca' or 'autoencoder'")
-     pass
 
 
 class RFClassifier:

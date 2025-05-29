@@ -404,6 +404,41 @@ def get_reduced_features(df, n_components):
     pca = PCA(n_components=0.9)
     return pd.DataFrame(pca.fit_transform(df))
 
+def getThirtySecondWindows(path : Path):
+    thirty_second_windows = pd.DataFrame(columns=["path", "type"])
+
+    for entry in os.listdir(path):
+        entry_path = path / entry
+
+        if entry_path.is_dir():
+
+            # get type of attack
+            entry_lower = entry.lower()
+
+            if "_dos" in entry_lower:
+                type = "DoS"
+            elif "runsomware" in entry_lower:
+                type = "runsomware"
+            elif "backdoor" in entry_lower:
+                type = "backdoor"
+            elif "mitm" in entry_lower:
+                type = "MITM"
+            elif "_ddos" in entry_lower:
+                type = "DDoS"
+            elif "injection" in entry_lower:
+                type = "injection"
+            else:
+                type = "unknown"
+            
+            for window in os.listdir(entry_path):
+                window_path = entry_path / window
+
+                thirty_second_windows = pd.concat([
+                    thirty_second_windows,
+                    pd.DataFrame([{"path": str(window_path), "type": type}])
+                ], ignore_index=True)
+    return thirty_second_windows
+
 
 # region auxiliary ----------------------------------------------------------------------------------------------------------------------------
 
