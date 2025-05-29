@@ -6,44 +6,70 @@ from . import data_processing as dp
 # Grid Search for hyperparameter tuning
 
 def create_feature_vectors(thirtySecondWindow : dp.ThirtySecWindow, method : str = 'pca'):
-     #TODO: 0/0 error for some connections when pca, get minimum number of ten-second windows
      main_df = dp.pd.DataFrame()
 
      # use PCA or autoencoder
-     if method == 'pca':
+     if method == 'pca': #TODO: include s1, s2, s3
+
+        # collect all 10s windows of 30s window
+        global_df = dp.pd.DataFrame()
         for host in thirtySecondWindow.hosts:
-            most_common_tensecwindow_count_ = dp.most_common_tensecwindow_count(host)
-
             for connection in host.connections:
-                len_ = len(connection.ten_sec_windows)
-                #if len_ >= most_common_tensecwindow_count_ and len_ > 1:
-                if len_ > 1:
-                    df = dp.pd.DataFrame()
-                    
-                    # acquire data from all ten-second windows and averaged data
-                    for ten_second_window in connection.ten_sec_windows:
-                        df = dp.pd.concat([df, ten_second_window.data])
-                    
-                    averaged_tensecwindow_df_ = dp.averaged_tensecwindow_df(connection)
-                    
+                for ten_second_window in connection.ten_sec_windows:
+                    global_df = dp.pd.concat([global_df, ten_second_window.data], ignore_index=True)
+        
+        # keep useful features only
+        global_df = global_df.loc[:, dp.USEFUL_FEATURES_START:]
+
+        # fill NaNs with averaged values
+        global_averaged_df = dp.average_features(thirtySecondWindow)
+        global_df = global_df.fillna(global_averaged_df)
+
+        # convert bools to float
+        bool_cols = global_df.select_dtypes(include='bool').columns
+        global_df[bool_cols] = global_df[bool_cols].astype(float)
+
+        # scale
+        global_scaler = dp.StandardScaler()
+        global_df_scaled = global_scaler.fit_transform(global_df)
+
+        # fit pca
+        global_pca = dp.PCA(n_components=20)
+        global_pca.fit(global_df_scaled)
+
+        # apply global scaling and pca to all ten-second windows and collect
+        main_pca_df = dp.pd.DataFrame()
+        for host in thirtySecondWindow.hosts:
+            for connection in host.connections:
+                features_average = dp.averaged_tensecwindow_df(connection)
+
+                for ten_second_window in connection.ten_sec_windows:
+
                     # keep useful features only
-                    idx = df.columns.get_loc(dp.USEFUL_FEATURES_START)
-                    df = df.iloc[:, idx:]
-                
+                    features = ten_second_window.data.loc[:, dp.USEFUL_FEATURES_START:]
+
                     # fill NaNs with averaged values
-                    df = df.fillna(averaged_tensecwindow_df_.iloc[0])
+                    features = features.fillna(features_average)
 
-                    # convert bools to floats
-                    bool_cols = df.select_dtypes(include='bool').columns
-                    df[bool_cols] = df[bool_cols].astype(float)
+                    # convert bools to float
+                    bool_cols = features.select_dtypes(include='bool').columns
+                    features[bool_cols] = features[bool_cols].astype(float)
 
-                    # reduce features
-                    reduced_df = dp.get_reduced_features(df, most_common_tensecwindow_count_)
-                    main_df = dp.pd.concat([main_df, reduced_df], ignore_index=True)
-        return main_df
-     elif method == 'autoencoder':
+                    # scale
+                    features_scaled = global_scaler.transform(features)
+
+                    # apply pca
+                    features_pca = global_pca.transform(features_scaled)
+
+                    # concatenate
+                    main_pca_df = dp.pd.concat([main_pca_df, dp.pd.DataFrame(features_pca)], ignore_index=True)
+
+        # return mean df
+        return dp.pd.DataFrame(main_pca_df.mean(axis=0))
+
+     elif method == 'autoencoder': # TODO: autoencoder
          # apply autoencoder to the data
-         pass
+         return main_df
      else:
          raise ValueError("Method must be either 'pca' or 'autoencoder'")
      pass

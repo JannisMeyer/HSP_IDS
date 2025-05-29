@@ -70,7 +70,7 @@ class Host:
 
 class ThirtySecWindow:
     def __init__(self, path : Path):
-        self.s1 = self.get_s1(path / 's1_general_qs.csv')
+        self.s1 = self.get_s1(path.joinpath('s1_general_qs.csv'))
         self.hosts = self.get_hosts(path)
 
     def get_s1(self, s1_path):
@@ -364,8 +364,7 @@ def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced 
                     df = pd.concat([df, ten_second_window.data])
                 
                 # keep only columns starting from 'conn_duration'
-                idx = df.columns.get_loc(USEFUL_FEATURES_START)
-                df = df.iloc[:, idx:]
+                df_all = df_all.loc[:, USEFUL_FEATURES_START:]
             
                 # get features directly or in reduced form
                 if get_reduced:
@@ -432,15 +431,10 @@ def averaged_tensecwindow_df(connection: Connection):
     # collect all dfs
     dfs = [tsw.data for tsw in connection.ten_sec_windows]
 
-    if not dfs:
-        return pd.DataFrame([0], columns=[])
-
     df_all = pd.concat(dfs, ignore_index=True)
 
     # remove useless features
-    columns = df_all.columns
-    start_idx = columns.get_loc(USEFUL_FEATURES_START)
-    df_all = df_all[start_idx:]
+    df_all = df_all.loc[:, USEFUL_FEATURES_START:]
     
     # compute mean
     avg = df_all.mean(axis=0, skipna=True)
@@ -449,4 +443,25 @@ def averaged_tensecwindow_df(connection: Connection):
     avg_filled = avg.fillna(0)
     
     return pd.DataFrame([avg_filled])
+
+def average_features(thirtySecondWindow : ThirtySecWindow):
+
+    # collect all ten-second windows of 30s window
+    global_df = pd.DataFrame()
+    
+    for host in thirtySecondWindow.hosts:
+        for connection in host.connections:
+            for ten_second_window in connection.ten_sec_windows:
+                global_df = pd.concat([global_df, ten_second_window.data], ignore_index=True)
+    
+    # keep useful features only
+    global_df = global_df.loc[:, USEFUL_FEATURES_START:]
+
+    #compute mean
+    global_df = global_df.mean(axis=0, skipna=True)
+
+    # replace NaN means with 0 if all values are NaN
+    global_df = global_df.fillna(0)
+
+    return global_df # return series so that df.fillna(global_df) works correctly
 
