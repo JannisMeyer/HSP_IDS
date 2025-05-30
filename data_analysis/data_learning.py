@@ -5,7 +5,7 @@ from . import data_processing as dp
 # -> do this k times and evaluate model
 # Grid Search for hyperparameter tuning
 
-def create_feature_vector(thirtySecondWindow : dp.ThirtySecWindow, method : str = 'pca'):
+def create_feature_vector(thirtySecondWindow : dp.ThirtySecondWindow, method : str = 'pca'):
 
      # use PCA or autoencoder
      if method == 'pca': #TODO: include s1, s2, s3
@@ -13,8 +13,8 @@ def create_feature_vector(thirtySecondWindow : dp.ThirtySecWindow, method : str 
         # collect all 10s windows of 30s window
         global_df = dp.pd.DataFrame()
         for host in thirtySecondWindow.hosts:
-            for connection in host.connections:
-                for ten_second_window in connection.ten_sec_windows:
+            for connection in host.ten_second_windows:
+                for ten_second_window in connection.connections:
                     global_df = dp.pd.concat([global_df, ten_second_window.data], ignore_index=True)
         
         # keep useful features only
@@ -39,10 +39,10 @@ def create_feature_vector(thirtySecondWindow : dp.ThirtySecWindow, method : str 
         # apply global scaling and pca to all ten-second windows and collect
         main_pca_df = dp.pd.DataFrame()
         for host in thirtySecondWindow.hosts:
-            for connection in host.connections:
-                features_average = dp.averaged_tensecwindow_df(connection)
+            for connection in host.ten_second_windows:
+                features_average = dp.get_average_connection(connection)
 
-                for ten_second_window in connection.ten_sec_windows:
+                for ten_second_window in connection.connections:
 
                     # keep useful features only
                     features = ten_second_window.data.loc[:, dp.USEFUL_FEATURES_START:]

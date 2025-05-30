@@ -13,10 +13,11 @@ from tslearn.datasets import CachedDatasets
 from tslearn.preprocessing import TimeSeriesScalerMeanVariance
 
 # TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
+# TODO: rebuild data structure and functions
 
 # region classes -------------------------------------------------------------------------------------------------------------------------------
 
-class TenSecWindow:
+class Connection:
     def __init__(self, path : Path):
         self.data = self.get_data(path / 'host_data_chunk_full.csv')
 
@@ -29,25 +30,25 @@ class TenSecWindow:
 
         return df   
 
-class Connection:
+class TenSecondWindow:
     def __init__(self, path : Path):
-        self.ten_sec_windows = self.getTenSecWindows(path)
+        self.connections = self.get_connections(path)
 
-    def getTenSecWindows(self, path):
-        ten_sec_windows : list[TenSecWindow] = [] # imply data type so list is iterable and doesn't recall the get-method
+    def get_connections(self, path):
+        connections : list[Connection] = [] # imply data type so list is iterable and doesn't recall the get-method
 
         for entry in os.listdir(path):
             entry_path = path / entry
             if entry_path.is_dir():
-                ten_sec_windows.append(TenSecWindow(entry_path))
+                connections.append(Connection(entry_path))
 
-        return ten_sec_windows
+        return connections
 
 class Host:
     def __init__(self, path : Path):
         self.s2 = self.get_s2(path / 's2_selected_qs.csv')
         self.s3 = self.get_s3(path / 's3_connection_qs.csv')
-        self.connections = self.get_connections(path)
+        self.ten_second_windows = self.get_ten_second_windows(path)
 
     def get_s2(self, s2_path):
         return pd.read_csv(s2_path)
@@ -55,20 +56,20 @@ class Host:
     def get_s3(self, s3_path):#
         return pd.read_csv(s3_path)
 
-    def get_connections(self, path):
-        connections : list[Connection] = []
-        connections_path = path / 'connections'
+    def get_ten_second_windows(self, path):
+        ten_second_windows : list[TenSecondWindow] = []
+        ten_second_windows_path = path / 'connections'
 
-        if connections_path.exists():
-            for entry in os.listdir(connections_path):
-                entry_path = connections_path / entry
+        if ten_second_windows_path.exists():
+            for entry in os.listdir(ten_second_windows_path):
+                entry_path = ten_second_windows_path / entry
 
                 if entry_path.is_dir():
-                    connections.append(Connection(entry_path))
+                    ten_second_windows.append(TenSecondWindow(entry_path))
 
-        return connections
+        return ten_second_windows
 
-class ThirtySecWindow:
+class ThirtySecondWindow:
     def __init__(self, path : Path):
         self.s1 = self.get_s1(path.joinpath('s1_general_qs.csv'))
         self.hosts = self.get_hosts(path)
@@ -91,30 +92,30 @@ class ThirtySecWindow:
 # region data plotting -----------------------------------------------------------------------------------------------------------------------
 USEFUL_FEATURES_START = 'conn_duration'
 
-# TODO: test this on real datasets
-def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool):
+# TODO: adapt to actual data structure (collect time series of connections over 10s windows and do correlation)
+def plot_correlation(thirty_sec_window : ThirtySecondWindow, plot_dendrogram : bool):
 
     for host_index, host in enumerate(thirty_sec_window.hosts):
         print(f"\n----- Host {host_index + 1} -----")
 
         all_cors = []
         
-        for connection in host.connections:
+        for ten_second_window in host.ten_second_windows:
             feature_series = {}
 
-            if connection.ten_sec_windows.__len__() > 1:
-                for ten_sec_window in connection.ten_sec_windows:
+            if ten_second_window.connections.__len__() > 1:
+                for connection in ten_second_window.connections:
                     
                     # on first run, determine which columns to use
                     if not feature_series:
-                        all_columns = list(ten_sec_window.data.columns)
+                        all_columns = list(connection.data.columns)
                         start_index = all_columns.index(USEFUL_FEATURES_START)
                         useful_features = all_columns[start_index:]
                         feature_series = {feature: [] for feature in useful_features}
                     
                     # get values of features
                     for feature in feature_series:
-                        value = ten_sec_window.data[feature][0]
+                        value = connection.data[feature][0]
                         value = float(value) # cast to float for consistency (bools)
                         feature_series[feature].append(value)
 
@@ -170,29 +171,30 @@ def plot_correlation(thirty_sec_window : ThirtySecWindow, plot_dendrogram : bool
 
         #break
 
-def connection_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int = 3):
+# TODO: adapt to actual data structure (collect time series of connections over 10s windows and do kmeans)
+def connection_kmeans(thirty_second_window : ThirtySecondWindow, n_clusters : int = 3):
 
     for host in thirty_second_window.hosts:
 
         print(f"\n----- Host {host.s2['sq_identifier'][0]} -----")
 
-        for id, connection in enumerate(host.connections):
-            print(f"----- Connection {id} -----")
+        for id, ten_second_window in enumerate(host.ten_second_windows):
+            print(f"----- 10s-Window {id} -----")
             features = []
             columns = None
 
-            if len(connection.ten_sec_windows) > 1:
-                averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
+            if len(ten_second_window.connections) > 1:
+                average_connection = get_average_connection(ten_second_window)
 
                 # cut useless features
-                columns = connection.ten_sec_windows[0].data.columns
+                columns = ten_second_window.connections[0].data.columns
                 start_idx = columns.get_loc(USEFUL_FEATURES_START)
                 
-                for ten_second_window in connection.ten_sec_windows:
-                    row = ten_second_window.data
+                for connection in ten_second_window.connections:
+                    row = connection.data
 
                     # fill NaNs with averaged values
-                    row = row.fillna(averaged_tensecwindow_df_.iloc[0])
+                    row = row.fillna(average_connection.iloc[0])
 
                     # acquire usefull features
                     row = row.values[0]
@@ -203,10 +205,10 @@ def connection_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int =
                 # convert to np.array and remove NaNs
                 features = np.array(features, dtype=float)
 
-                # rotate axes to have shape (n_features, n_tensecwindows, 1)
+                # rotate axes to have shape (n_features, n_tensecwindows=12, 1)
                 features = np.swapaxes(features, 0, 1) 
 
-                # -> have np.array with shape (n_features, n_tensecwindows, 1)
+                # -> have np.array with shape (n_features, n_tensecwindows=12, 1)
                 # -> every feature will be assigned to a cluster
 
                 # fit samples
@@ -234,19 +236,13 @@ def connection_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int =
                 plt.tight_layout()
                 plt.show()
             else:
-                print("Not enough 10s windows to compute clustering, skipping!")
+                print("Not enough connections to compute clustering, skipping!")
                 continue
             break
         break
-    
 
-# TODO: test this on real datasets
-# TODO: redo for a single connection with normal Kmeans, compare before and after PCA
-# requirements txt (Anforderungsliste) erstellen für das Training und an Murad schicken
-# Welche Modelle bieten sich an für das Training?
-# Modellstruktur pitchen
-# host-weise
-def time_series_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int = 3):
+# TODO: adapt to actual data structure (collect time series of connections over 10s windows and do kmeans)
+def time_series_kmeans(thirty_second_window : ThirtySecondWindow, n_clusters : int = 3):
 
     for host in thirty_second_window.hosts:
 
@@ -254,24 +250,24 @@ def time_series_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int 
         samples = []
 
         # get most common 10s window count for maximum data availability
-        most_common_tensecwindow_count_ = most_common_tensecwindow_count(host)
+        most_common_tensecwindow_count_ = get_most_common_connection_count(host)
         print(f"Most common 10s window count is {most_common_tensecwindow_count_}, using that for clustering")
         
         if most_common_tensecwindow_count_ > 1: # less than 2 is not applicable
-            for connection in host.connections:
-                if len(connection.ten_sec_windows) == most_common_tensecwindow_count_:
+            for ten_second_window in host.ten_second_windows:
+                if len(ten_second_window.connections) == most_common_tensecwindow_count_:
                     sample = []
-                    averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
+                    average_connection = get_average_connection(ten_second_window)
 
                     # cut useless features
-                    columns = connection.ten_sec_windows[0].data.columns
+                    columns = ten_second_window.connections[0].data.columns
                     start_idx = columns.get_loc(USEFUL_FEATURES_START)
                     
-                    for ten_second_window in connection.ten_sec_windows:
-                        row = ten_second_window.data
+                    for connection in ten_second_window.connections:
+                        row = connection.data
 
                         # fill NaNs with averaged values
-                        row = row.fillna(averaged_tensecwindow_df_.iloc[0])
+                        row = row.fillna(average_connection.iloc[0])
 
                         # acquire usefull features
                         row = row.values[0]
@@ -303,7 +299,7 @@ def time_series_kmeans(thirty_second_window : ThirtySecWindow, n_clusters : int 
                 print("No samples to cluster for this host!")
             #break
         else:
-            print("Not enough 10s windows to compute clustering, skipping!")
+            print("Not enough connections to compute clustering, skipping!")
             #break
 
 
@@ -344,7 +340,8 @@ def get_s3_features(path : Path): # use path for multi 30s window analysis
 
     return df_list
 
-def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced : bool):
+# TODO: adapt to actual data structure (collect time series of connections over 10s windows and reduce)
+def get_connection_features(thirty_second_window : ThirtySecondWindow, get_reduced : bool):
     host_dict = {}
 
     # iterate over hosts
@@ -352,16 +349,16 @@ def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced 
         connection_dict = {}
 
         # iterate over connections
-        for i, connection in enumerate(host.connections):
+        for i, ten_second_window in enumerate(host.ten_second_windows):
             print(f"---- Processing connection {i} ----")
 
             # iterate over ten second windows and acquire connection features
-            if len(connection.ten_sec_windows) > 1:
+            if len(ten_second_window.connections) > 1:
                 df = pd.DataFrame()
-                averaged_tensecwindow_df_ = averaged_tensecwindow_df(connection)
+                average_connection = get_average_connection(ten_second_window)
                 
-                for ten_second_window in connection.ten_sec_windows:
-                    df = pd.concat([df, ten_second_window.data])
+                for connection in ten_second_window.connections:
+                    df = pd.concat([df, connection.data])
                 
                 # keep only columns starting from 'conn_duration'
                 df_all = df_all.loc[:, USEFUL_FEATURES_START:]
@@ -370,7 +367,7 @@ def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced 
                 if get_reduced:
 
                     # fill NaNs with averaged values
-                    df = df.fillna(averaged_tensecwindow_df_.iloc[0])
+                    df = df.fillna(average_connection.iloc[0])
 
                     # convert bools to floats
                     bool_cols = df.select_dtypes(include='bool').columns
@@ -378,22 +375,22 @@ def get_connection_features(thirty_second_window : ThirtySecWindow, get_reduced 
                     #print(df)
 
                     # reduce features using PCA
-                    connection_dict[connection] = get_reduced_features(df)
-                    print(connection_dict[connection])
+                    connection_dict[ten_second_window] = get_reduced(df)
+                    print(connection_dict[ten_second_window])
                 else:
-                    connection_dict[connection] = df
+                    connection_dict[ten_second_window] = df
 
-                # -> have dict of hosts with dict of connections with df of 10s-windows with respective features
+                # -> have dict of hosts with dict of 10s windows with df of connections with respective features
                 host_dict[host] = connection_dict
                 #break
             else:
-                #print("Not enough 10s windows to compute reduced features, skipping!")
+                #print("Not enough connections to compute reduced features, skipping!")
                 pass
         break
 
     return host_dict
 
-def get_reduced_features(df, n_components):
+def get_pca_reduced(df, n_components):
 
     # scale data
     scaler = StandardScaler()
@@ -453,18 +450,18 @@ def load_windows_one_by_one(data_path : Path):
         window_path = data_path / window
         yield get_connection_features(window_path)
 
-def most_common_tensecwindow_count(host : Host):
-    counts = [len(conn.ten_sec_windows) for conn in host.connections]
+def get_most_common_connection_count(host : Host):
+    counts = [len(ten_second_window.connections) for ten_second_window in host.ten_second_windows]
 
     if not counts:
         return None
     
     return max(set(counts), key=counts.count)
 
-def averaged_tensecwindow_df(connection: Connection):
+def get_average_connection(ten_second_window: TenSecondWindow):
 
     # collect all dfs
-    dfs = [tsw.data for tsw in connection.ten_sec_windows]
+    dfs = [connection.data for connection in ten_second_window.connections]
 
     df_all = pd.concat(dfs, ignore_index=True)
 
@@ -479,15 +476,15 @@ def averaged_tensecwindow_df(connection: Connection):
     
     return pd.DataFrame([avg_filled])
 
-def average_features(thirtySecondWindow : ThirtySecWindow):
+def average_features(thirtySecondWindow : ThirtySecondWindow):
 
     # collect all ten-second windows of 30s window
     global_df = pd.DataFrame()
     
     for host in thirtySecondWindow.hosts:
-        for connection in host.connections:
-            for ten_second_window in connection.ten_sec_windows:
-                global_df = pd.concat([global_df, ten_second_window.data], ignore_index=True)
+        for ten_second_window in host.ten_second_windows:
+            for connection in ten_second_window.connections:
+                global_df = pd.concat([global_df, connection.data], ignore_index=True)
     
     # keep useful features only
     global_df = global_df.loc[:, USEFUL_FEATURES_START:]
