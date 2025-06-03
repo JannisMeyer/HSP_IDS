@@ -5,6 +5,8 @@ from . import data_processing as dp
 # -> do this k times and evaluate model
 # Grid Search for hyperparameter tuning
 
+#TODO: rebuild
+
 def create_feature_vector(thirtySecondWindow : dp.ThirtySecondWindow, method : str = 'pca'):
 
      # use PCA or autoencoder
@@ -66,13 +68,14 @@ def create_feature_vector(thirtySecondWindow : dp.ThirtySecondWindow, method : s
         # return mean df
         return dp.pd.DataFrame(main_pca_df.mean(axis=0))
 
-     elif method == 'autoencoder': # TODO: autoencoder
+     elif method == 'autoencoder': # TODO: autoencoder, encode
          # apply autoencoder to the data
          pass
      else:
          raise ValueError("Method must be either 'pca' or 'autoencoder'")
 
 
+# TODO: look at statistics after training, evtl. LSTM oder Transformer
 class RFClassifier:
     def __init__(self, X, y):
         self.model = RandomForestClassifier(n_estimators=100, max_depth=10)

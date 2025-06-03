@@ -1,3 +1,5 @@
+import time
+from typing import List
 import numpy as np
 import pandas as pd
 import os
@@ -11,12 +13,15 @@ from sklearn.discriminant_analysis import StandardScaler
 from tslearn.clustering import TimeSeriesKMeans
 from tslearn.datasets import CachedDatasets
 from tslearn.preprocessing import TimeSeriesScalerMeanVariance
+from collections import defaultdict
+import pypickle as pp
 
 # TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
 # TODO: rebuild data structure and functions
 
 # region classes -------------------------------------------------------------------------------------------------------------------------------
 
+#  TODO: have a df of all host_data_chunk_full.csvs combined and use that, maybe only useable if > 1
 class Connection:
     def __init__(self, path : Path):
         self.data = self.get_data(path / 'host_data_chunk_full.csv')
@@ -30,64 +35,87 @@ class Connection:
 
         return df   
 
-class TenSecondWindow:
-    def __init__(self, path : Path):
-        self.connections = self.get_connections(path)
+# TODO: consider removing this, as it is somewhat constant, and just have connections per host
+# class TenSecondWindow:
+#     def __init__(self, path : Path):
+#         self.connections = self.get_connections(path)
 
-    def get_connections(self, path):
-        connections : list[Connection] = [] # imply data type so list is iterable and doesn't recall the get-method
+#     def get_connections(self, path):
+#         connections : list[Connection] = [] # imply data type so list is iterable and doesn't recall the get-method
 
-        for entry in os.listdir(path):
-            entry_path = path / entry
-            if entry_path.is_dir():
-                connections.append(Connection(entry_path))
+#         for entry in os.listdir(path):
+#             entry_path = path / entry
+#             if entry_path.is_dir():
+#                 connections.append(Connection(entry_path))
 
-        return connections
+#         return connections
 
+# TODO: consider having averaged stuff here to access it directly
 class Host:
-    def __init__(self, path : Path):
+    def __init__(self, path : Path, names : List):
         self.s2 = self.get_s2(path / 's2_selected_qs.csv')
         self.s3 = self.get_s3(path / 's3_connection_qs.csv')
-        self.ten_second_windows = self.get_ten_second_windows(path)
+        #self.ten_second_windows = self.get_ten_second_windows(path)
+        self.connections = self.get_connections(path, names)
 
-    def get_s2(self, s2_path):
-        return pd.read_csv(s2_path)
+    def get_s2(self, path : Path):
+        return pd.read_csv(path)
 
-    def get_s3(self, s3_path):#
-        return pd.read_csv(s3_path)
+    def get_s3(self, path : Path):
+        return pd.read_csv(path)
 
-    def get_ten_second_windows(self, path):
-        ten_second_windows : list[TenSecondWindow] = []
-        ten_second_windows_path = path / 'connections'
+    # def get_ten_second_windows(self, path):
+    #     ten_second_windows : list[TenSecondWindow] = []
+    #     ten_second_windows_path = path / 'connections'
 
-        if ten_second_windows_path.exists():
-            for entry in os.listdir(ten_second_windows_path):
-                entry_path = ten_second_windows_path / entry
+    #     if ten_second_windows_path.exists():
+    #         for entry in os.listdir(ten_second_windows_path):
+    #             entry_path = ten_second_windows_path / entry
 
-                if entry_path.is_dir():
-                    ten_second_windows.append(TenSecondWindow(entry_path))
+    #             if entry_path.is_dir():
+    #                 ten_second_windows.append(TenSecondWindow(entry_path))
 
-        return ten_second_windows
+    #     return ten_second_windows
+    
+    def get_connections(self, path: Path, names : List):
+        path = path / 'connections'
+        connections = defaultdict(list)
+
+        # go over all 10s windows and collect respective connection data
+        for ten_second_window in os.scandir(path):
+                ten_second_window_path = path / ten_second_window
+
+                #if ten_second_window_path.is_dir(): # is_dir() is slow
+                for connection in os.scandir(ten_second_window_path):
+                    start= time.time()
+                    connection_path = ten_second_window_path / connection
+
+                    #if connection_path.is_dir():
+                    connections[connection].append(pd.read_csv(connection_path / 'host_data_chunk_full.csv'))
+                    end= time.time()
+                    print(end - start)
+        #print(connections.keys())
+
 
 class ThirtySecondWindow:
     def __init__(self, path : Path):
         self.s1 = self.get_s1(path.joinpath('s1_general_qs.csv'))
+        self.connection_feature_names = pd.read_csv('connection_features.CSV').columns
         self.hosts = self.get_hosts(path)
 
     def get_s1(self, s1_path):
         return pd.read_csv(s1_path)
 
-    def get_hosts(self, path):
+    def get_hosts(self, path : Path):
         hosts : list[Host] = []
 
-        for entry in os.listdir(path):
+        for entry in os.scandir(path):
             entry_path = path / entry
 
             if entry_path.is_dir():
-                hosts.append(Host(entry_path))
+                hosts.append(Host(entry_path, self.connection_feature_names))
 
         return hosts
-    
 
 # region data plotting -----------------------------------------------------------------------------------------------------------------------
 USEFUL_FEATURES_START = 'conn_duration'
@@ -401,39 +429,42 @@ def get_pca_reduced(df, n_components):
     pca = PCA(n_components=0.9)
     return pd.DataFrame(pca.fit_transform(df))
 
-def getThirtySecondWindows(path : Path):
+def getThirtySecondWindowPaths(path : Path):
     thirty_second_windows = pd.DataFrame(columns=["path", "type"])
 
-    for entry in os.listdir(path):
+    for entry in os.scandir(path):
         entry_path = path / entry
 
-        if entry_path.is_dir():
+        #if entry_path.is_dir():
 
-            # get type of attack
-            entry_lower = entry.lower()
+        # get type of attack
+        entry_lower = entry.name.lower()
 
-            if "_dos" in entry_lower:
-                type = "DoS"
-            elif "runsomware" in entry_lower:
-                type = "runsomware"
-            elif "backdoor" in entry_lower:
-                type = "backdoor"
-            elif "mitm" in entry_lower:
-                type = "MITM"
-            elif "_ddos" in entry_lower:
-                type = "DDoS"
-            elif "injection" in entry_lower:
-                type = "injection"
-            else:
-                type = "unknown"
-            
-            for window in os.listdir(entry_path):
-                window_path = entry_path / window
+        if "_dos" in entry_lower:
+            type = "DoS"
+        elif "runsomware" in entry_lower:
+            type = "runsomware"
+        elif "backdoor" in entry_lower:
+            type = "backdoor"
+        elif "mitm" in entry_lower:
+            type = "MITM"
+        elif "_ddos" in entry_lower:
+            type = "DDoS"
+        elif "injection" in entry_lower:
+            type = "injection"
+        else:
+            type = "unknown"
+        
+        # get path and create df
+        for window in os.scandir(entry_path):
+            window_path = entry_path / window
 
+            if window_path.is_dir():
                 thirty_second_windows = pd.concat([
                     thirty_second_windows,
                     pd.DataFrame([{"path": str(window_path), "type": type}])
                 ], ignore_index=True)
+    thirty_second_windows.reset_index()
     return thirty_second_windows
 
 
@@ -458,23 +489,23 @@ def get_most_common_connection_count(host : Host):
     
     return max(set(counts), key=counts.count)
 
-def get_average_connection(ten_second_window: TenSecondWindow):
+# def get_average_connection(ten_second_window: TenSecondWindow):
 
-    # collect all dfs
-    dfs = [connection.data for connection in ten_second_window.connections]
+#     # collect all dfs
+#     dfs = [connection.data for connection in ten_second_window.connections]
 
-    df_all = pd.concat(dfs, ignore_index=True)
+#     df_all = pd.concat(dfs, ignore_index=True)
 
-    # remove useless features
-    df_all = df_all.loc[:, USEFUL_FEATURES_START:]
+#     # remove useless features
+#     df_all = df_all.loc[:, USEFUL_FEATURES_START:]
     
-    # compute mean
-    avg = df_all.mean(axis=0, skipna=True)
+#     # compute mean
+#     avg = df_all.mean(axis=0, skipna=True)
     
-    # replace NaN means with 0 if all values are NaN
-    avg_filled = avg.fillna(0)
+#     # replace NaN means with 0 if all values are NaN
+#     avg_filled = avg.fillna(0)
     
-    return pd.DataFrame([avg_filled])
+#     return pd.DataFrame([avg_filled])
 
 def average_features(thirtySecondWindow : ThirtySecondWindow):
 
