@@ -86,15 +86,11 @@ class Host:
                 ten_second_window_path = path / ten_second_window
 
                 #if ten_second_window_path.is_dir(): # is_dir() is slow
-                for connection in os.scandir(ten_second_window_path):
-                    start= time.time()
+                for i, connection in enumerate(os.scandir(ten_second_window_path)):
                     connection_path = ten_second_window_path / connection
 
                     #if connection_path.is_dir():
                     connections[connection].append(pd.read_csv(connection_path / 'host_data_chunk_full.csv'))
-                    end= time.time()
-                    print(end - start)
-        #print(connections.keys())
 
 
 class ThirtySecondWindow:

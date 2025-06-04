@@ -11,4 +11,5 @@ scipy==1.15.2
 tslearn==0.6.3
 importlib-metadata==6.8.0
 pypickle==2.0.1
-pyarrow==20.0.0 
+pyarrow==20.0.0
+sysstat
