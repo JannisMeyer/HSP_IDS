@@ -1,5 +1,6 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from . import data_processing as dp
 # for later: k-fold cross-validation: split data into k subsets, train on k-1, test on 1
 # -> do this k times and evaluate model
@@ -40,7 +41,7 @@ def create_test_ddos_feature_vectors(path : dp.Path, selected_columns : list): #
             mean_host = host.select_dtypes(include='number').mean().fillna(0)
 
             # groupy by connection and mean
-            host_mean_connections = host.groupby(['conn_protocol', 'conn_src_ip', 'conn_dst_ip']) # this is key of a connection across 10s windows
+            host_mean_connections = host.groupby(['conn_protocol', 'conn_src_ip', 'conn_dst_ip']) # this is key of a connection across 10s windows TODO: add ports
             feature_vector = dp.pd.DataFrame()
             
             for i, group in host_mean_connections:
@@ -98,18 +99,18 @@ def create_feature_vectors(tsw : dp.ThirtySecondWindow, selected_columns : list)
 
 # TODO: look at statistics after training, evtl. LSTM oder Transformer
 class RFClassifier:
-    def __init__(self, X, y):
-        self.model = RandomForestClassifier(n_estimators=100, max_depth=10)
-        self.X_train, self.X_test, self.y_train, self.y_test, self.predictions = self.train_model(X, y)
+    def __init__(self, X, y, n_estimators=100, max_depth=10):
+        self.model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth)
+        self.train_model(X, y)
 
-    def train_model(self, X, y):
-        X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y)
-        self.model.fit(self.X_train, self.y_train)
-        return X_train, X_test, y_train, y_test
+    def train_model(self, X, Y):
+        x_train, x_test, y_train, y_test = train_test_split(X, Y, stratify=Y)
+        self.model.fit(x_train, y_train)
 
-    def predict(self, X):
-        self.predictions = self.model.predict(X)
-        print(self.predictions)
+        predictions = self.model.predict(x_test)
+
+        print(f"accurracy: {accuracy_score(y_test, predictions)}")
+        print(f"importances: {self.model.feature_importances_}")
     
 # region auxiliary -------------------------------------------------------------------------------------------------------------------------------
 
