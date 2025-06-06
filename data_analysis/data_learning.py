@@ -3,77 +3,98 @@ from sklearn.model_selection import train_test_split
 from . import data_processing as dp
 # for later: k-fold cross-validation: split data into k subsets, train on k-1, test on 1
 # -> do this k times and evaluate model
-# Grid Search for hyperparameter tuning
+# Grid Search for hyperparameter tuning or Optuna
 
-#TODO: rebuild
+# region feature vectors -------------------------------------------------------------------------------------------------------------------------------
 
-def create_feature_vector(thirtySecondWindow : dp.ThirtySecondWindow, method : str = 'pca'):
+def create_test_ddos_feature_vectors(path : dp.Path, selected_columns : list): # pass absolute path!
+    start = dp.time.time()
+    test_ddos_parquet = dp.pd.read_parquet(path / 'intrusion_normal_DDoS_10_final.parquet')
+    end = dp.time.time()
+    print('time to read parquet ddos file: ' + str(end - start) + 's')
 
-     # use PCA or autoencoder
-     if method == 'pca': #TODO: include s1, s2, s3
+    feature_vectors = dp.pd.DataFrame()
 
-        # collect all 10s windows of 30s window
-        global_df = dp.pd.DataFrame()
-        for host in thirtySecondWindow.hosts:
-            for connection in host.ten_second_windows:
-                for ten_second_window in connection.connections:
-                    global_df = dp.pd.concat([global_df, ten_second_window.data], ignore_index=True)
-        
-        # keep useful features only
-        global_df = global_df.loc[:, dp.USEFUL_FEATURES_START:]
+    # group df by window time key and iterate so not to mix up 30s windows
+    learning_dataset = dp.pd.DataFrame()
+    test_ddos_parquet_window_time_key = test_ddos_parquet.groupby('window_time_key')
 
-        # fill NaNs with averaged values
-        global_averaged_df = dp.average_features(thirtySecondWindow)
-        global_df = global_df.fillna(global_averaged_df)
+    for i, tsw in test_ddos_parquet_window_time_key:
+        start = dp.time.time()
 
-        # convert bools to float
-        bool_cols = global_df.select_dtypes(include='bool').columns
-        global_df[bool_cols] = global_df[bool_cols].astype(float)
+        # get connections
+        test_ddos_parquet_conn_src = tsw.reset_index().groupby('conn_src_ip')
+        test_ddos_parquet_conn_dst = tsw.reset_index().groupby('conn_dst_ip')
 
-        # scale
-        global_scaler = dp.StandardScaler()
-        global_df_scaled = global_scaler.fit_transform(global_df)
+        for key in test_ddos_parquet_conn_src.groups.keys() & test_ddos_parquet_conn_dst.groups.keys():
 
-        # fit pca
-        global_pca = dp.PCA(n_components=20)
-        global_pca.fit(global_df_scaled)
+            # get all connections for a host
+            host = dp.pd.DataFrame()
+            host = dp.pd.concat([host, test_ddos_parquet_conn_src.get_group(key)], axis=0, ignore_index=True)
+            host = dp.pd.concat([host, test_ddos_parquet_conn_dst.get_group(key)], axis=0, ignore_index=True)
+            host.reset_index()
 
-        # apply global scaling and pca to all ten-second windows and collect
-        main_pca_df = dp.pd.DataFrame()
-        for host in thirtySecondWindow.hosts:
-            for connection in host.ten_second_windows:
-                features_average = dp.get_average_connection(connection)
+            # get average connection values
+            bool_columns = host.select_dtypes(include='bool').columns
+            host[bool_columns] = host[bool_columns].astype(float)
+            mean_host = host.select_dtypes(include='number').mean().fillna(0)
 
-                for ten_second_window in connection.connections:
+            # groupy by connection and mean
+            host_mean_connections = host.groupby(['conn_protocol', 'conn_src_ip', 'conn_dst_ip']) # this is key of a connection across 10s windows
+            feature_vector = dp.pd.DataFrame()
+            
+            for i, group in host_mean_connections:
+                group = group.select_dtypes(include='number')
+                group = group.fillna(mean_host).mean().to_frame().transpose()
+                feature_vector = dp.pd.concat([feature_vector, group])
+            
+            # create feature vector
+            feature_vector = feature_vector.median().to_frame().transpose().drop('index', axis=1)
+            feature_vector = feature_vector[[col for col in selected_columns if col in feature_vector.columns]] # some cols in parquet files don't exist in CSVs
+            feature_vectors = dp.pd.concat([feature_vectors, feature_vector])
 
-                    # keep useful features only
-                    features = ten_second_window.data.loc[:, dp.USEFUL_FEATURES_START:]
+            #break
+        end = dp.time.time()
+        print(f'created feature vector for another tsw, execution time: {end - start}s')
+        #break
+    return feature_vectors
 
-                    # fill NaNs with averaged values
-                    features = features.fillna(features_average)
+def create_feature_vectors(tsw : dp.ThirtySecondWindow, selected_columns : list):
+    feature_vectors = dp.pd.DataFrame()
 
-                    # convert bools to float
-                    bool_cols = features.select_dtypes(include='bool').columns
-                    features[bool_cols] = features[bool_cols].astype(float)
+    # go over connections of each host and get connections
+    for host in tsw.hosts:
 
-                    # scale
-                    features_scaled = global_scaler.transform(features)
+        # get average connection
+        average_df = dp.pd.DataFrame()
+        for connection in host.connections.values():
+            all_data = dp.pd.concat([connection, tsw.s1, host.s2, host.s3], axis=1)
+            average_df = dp.pd.concat([average_df, all_data])
+        average_df = average_df[selected_columns]
+        average_df = average_df.mean().to_frame().transpose() # deals with booleans
+        average_df = average_df.fillna(0)
 
-                    # apply pca
-                    features_pca = global_pca.transform(features_scaled)
+        # get connection features
+        feature_vector = dp.pd.DataFrame()
+        for connection in host.connections.values():
 
-                    # concatenate
-                    main_pca_df = dp.pd.concat([main_pca_df, dp.pd.DataFrame(features_pca)], ignore_index=True)
+            # get all features
+            connection_df = dp.pd.concat([connection, tsw.s1, host.s2, host.s3], axis=1)
+            connection_df = (connection_df[selected_columns])
 
-        # return mean df
-        return dp.pd.DataFrame(main_pca_df.mean(axis=0))
+            # append meaned connection
+            
+            mean_connection = connection_df.fillna(average_df).mean().to_frame().transpose()
+            feature_vector = dp.pd.concat([feature_vector, mean_connection])
+            #break
 
-     elif method == 'autoencoder': # TODO: autoencoder, encode
-         # apply autoencoder to the data
-         pass
-     else:
-         raise ValueError("Method must be either 'pca' or 'autoencoder'")
+        # create feature vector
+        feature_vector = feature_vector.median().to_frame().transpose()
+        feature_vectors = dp.pd.concat([feature_vectors, feature_vector])
+        #break
+    return feature_vectors
 
+# region classifiers -------------------------------------------------------------------------------------------------------------------------------
 
 # TODO: look at statistics after training, evtl. LSTM oder Transformer
 class RFClassifier:
@@ -89,3 +110,9 @@ class RFClassifier:
     def predict(self, X):
         self.predictions = self.model.predict(X)
         print(self.predictions)
+    
+# region auxiliary -------------------------------------------------------------------------------------------------------------------------------
+
+def save_to_pickle(data, path : dp.Path):
+    dp.pp.save(path, data, overwrite=True)
+    print("saved data")

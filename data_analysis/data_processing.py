@@ -56,7 +56,7 @@ class Host:
         self.s2 = self.get_s2(path / 's2_selected_qs.csv')
         self.s3 = self.get_s3(path / 's3_connection_qs.csv')
         #self.ten_second_windows = self.get_ten_second_windows(path)
-        self.connections = self.get_connections(path, names)
+        self.connections : defaultdict = self.get_connections(path, names)
 
     def get_s2(self, path : Path):
         return pd.read_csv(path)
@@ -79,18 +79,19 @@ class Host:
     
     def get_connections(self, path: Path, names : List):
         path = path / 'connections'
-        connections = defaultdict(list)
+        connections = defaultdict(pd.DataFrame)
 
         # go over all 10s windows and collect respective connection data
         for ten_second_window in os.scandir(path):
-                ten_second_window_path = path / ten_second_window
+            ten_second_window_path = path / ten_second_window
 
-                #if ten_second_window_path.is_dir(): # is_dir() is slow
-                for i, connection in enumerate(os.scandir(ten_second_window_path)):
-                    connection_path = ten_second_window_path / connection
+            #if ten_second_window_path.is_dir(): # is_dir() is slow
+            for i, connection in enumerate(os.scandir(ten_second_window_path)):
+                connection_path = ten_second_window_path / connection
 
-                    #if connection_path.is_dir():
-                    connections[connection].append(pd.read_csv(connection_path / 'host_data_chunk_full.csv'))
+                #if connection_path.is_dir():
+                connections[connection.name] = pd.concat([connections[connection.name], pd.read_csv(connection_path / 'host_data_chunk_full.csv')]) # use connection.name, otherwise it doesn't count as same key!
+        return connections
 
 
 class ThirtySecondWindow:
@@ -437,15 +438,15 @@ def getThirtySecondWindowPaths(path : Path):
         entry_lower = entry.name.lower()
 
         if "_dos" in entry_lower:
-            type = "DoS"
+            type = "dos"
         elif "runsomware" in entry_lower:
             type = "runsomware"
         elif "backdoor" in entry_lower:
             type = "backdoor"
         elif "mitm" in entry_lower:
-            type = "MITM"
+            type = "mitm"
         elif "_ddos" in entry_lower:
-            type = "DDoS"
+            type = "ddos"
         elif "injection" in entry_lower:
             type = "injection"
         else:
