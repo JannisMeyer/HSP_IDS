@@ -266,7 +266,6 @@ def connection_kmeans(thirty_second_window : ThirtySecondWindow, n_clusters : in
             break
         break
 
-# TODO: adapt to actual data structure (collect time series of connections over 10s windows and do kmeans)
 def time_series_kmeans(thirty_second_window : ThirtySecondWindow, n_clusters : int = 3):
 
     for host in thirty_second_window.hosts:

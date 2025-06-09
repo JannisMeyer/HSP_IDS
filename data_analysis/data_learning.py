@@ -8,7 +8,7 @@ from . import data_processing as dp
 
 # region feature vectors -------------------------------------------------------------------------------------------------------------------------------
 
-def create_test_ddos_feature_vectors(path : dp.Path, selected_columns : list): # pass absolute path!
+def create_hostbased_fvs_parquet(path : dp.Path, selected_columns : list): # pass absolute path!
     start = dp.time.time()
     test_ddos_parquet = dp.pd.read_parquet(path / 'intrusion_normal_DDoS_10_final.parquet')
     end = dp.time.time()
@@ -22,6 +22,7 @@ def create_test_ddos_feature_vectors(path : dp.Path, selected_columns : list): #
 
     for i, tsw in test_ddos_parquet_window_time_key:
         start = dp.time.time()
+        
 
         # get connections
         test_ddos_parquet_conn_src = tsw.reset_index().groupby('conn_src_ip')
@@ -60,7 +61,7 @@ def create_test_ddos_feature_vectors(path : dp.Path, selected_columns : list): #
         #break
     return feature_vectors
 
-def create_feature_vectors(tsw : dp.ThirtySecondWindow, selected_columns : list):
+def create_hostbased_fvs_csv(tsw : dp.ThirtySecondWindow, selected_columns : list):
     feature_vectors = dp.pd.DataFrame()
 
     # go over connections of each host and get connections
@@ -94,6 +95,113 @@ def create_feature_vectors(tsw : dp.ThirtySecondWindow, selected_columns : list)
         feature_vectors = dp.pd.concat([feature_vectors, feature_vector])
         #break
     return feature_vectors
+
+def create_and_store_fvs(attack_data_set_path : dp.Path, ddos_test_path_parquet : dp.Path):
+    feature_vectors = dp.pd.DataFrame()
+    tsw_paths = dp.getThirtySecondWindowPaths(attack_data_set_path)
+    NR_OF_FVS = 100
+
+    # create ddos feature vectors
+    selected_cols = dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/connections/1556466432.434372-1556466442.434372/96.0_192.168.1.193_49338.0_192.168.1.152_1880.0/host_data_chunk_full.csv').select_dtypes(include='number').columns.to_list() \
+    + dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/s2_selected_qs.csv').select_dtypes(include='number').columns.to_list() \
+    + dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/s3_connection_qs.csv').select_dtypes(include='number').columns.to_list() \
+    + dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/s1_general_qs.csv').select_dtypes(include='number').columns.to_list()
+
+    test_ddos_feature_vectors = create_hostbased_fvs_parquet(ddos_test_path_parquet, selected_cols)
+
+    test_ddos_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_ddos_df.pkl')
+    save_to_pickle(test_ddos_feature_vectors, test_ddos_feature_vectors_path)
+
+    ddos_feature_vectors = dp.pp.load('test_ddos_df.pkl')
+    valid_columns = ddos_feature_vectors.columns.to_list()
+    ddos_feature_vectors['attack_type'] = 'ddos'
+    feature_vectors = dp.pd.concat([feature_vectors, ddos_feature_vectors])
+
+    # create mitm feature vectors and store
+    mitm_feature_vectors = dp.pd.DataFrame()
+    for index, tsw_object in tsw_paths[tsw_paths['type'] == 'mitm'].iterrows():
+        start = dp.time.time()
+        tsw = dp.ThirtySecondWindow(dp.Path(tsw_object['path']))
+        mitm_local_feature_vectors = create_hostbased_fvs_csv(tsw, valid_columns)
+        mitm_local_feature_vectors['attack_type'] = tsw_object['type'] # add attack type column for training
+        mitm_feature_vectors = dp.pd.concat([mitm_feature_vectors, mitm_local_feature_vectors])
+        end = dp.time.time()
+        row_count = mitm_feature_vectors.shape[0]
+        print(f"created mitm feature vectors for {tsw_object['type']} in {end - start}s, rows: {row_count}")
+        if row_count >= NR_OF_FVS:
+            break
+        #break
+    mitm_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_mitm_df.pkl')
+    save_to_pickle(mitm_feature_vectors, mitm_feature_vectors_path)
+
+    # create runsomware feature vectors and store
+    runsomware_feature_vectors = dp.pd.DataFrame()
+    for index, tsw_object in tsw_paths[tsw_paths['type'] == 'runsomware'].iterrows():
+        start = dp.time.time()
+        tsw = dp.ThirtySecondWindow(dp.Path(tsw_object['path']))
+        runsomware_local_feature_vectors = create_hostbased_fvs_csv(tsw, valid_columns)
+        runsomware_local_feature_vectors['attack_type'] = tsw_object['type'] # add attack type column for training
+        runsomware_feature_vectors = dp.pd.concat([runsomware_feature_vectors, runsomware_local_feature_vectors])
+        end = dp.time.time()
+        row_count = runsomware_feature_vectors.shape[0]
+        print(f"created runsomware feature vectors for {tsw_object['type']} in {end - start}s, rows: {row_count}")
+        if row_count >= NR_OF_FVS:
+            break
+        #break
+    runsomware_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_runsomware_df.pkl')
+    save_to_pickle(runsomware_feature_vectors, runsomware_feature_vectors_path)
+
+    # create injection feature vectors and store
+    injection_feature_vectors = dp.pd.DataFrame()
+    for index, tsw_object in tsw_paths[tsw_paths['type'] == 'injection'].iterrows():
+        start = dp.time.time()
+        tsw = dp.ThirtySecondWindow(dp.Path(tsw_object['path']))
+        injection_local_feature_vectors = create_hostbased_fvs_csv(tsw, valid_columns)
+        injection_local_feature_vectors['attack_type'] = tsw_object['type'] # add attack type column for training
+        injection_feature_vectors = dp.pd.concat([injection_feature_vectors, injection_local_feature_vectors])
+        end = dp.time.time()
+        row_count = injection_feature_vectors.shape[0]
+        print(f"created injection feature vectors for {tsw_object['type']} in {end - start}s, rows: {row_count}")
+        if row_count >= NR_OF_FVS:
+            break
+        #break
+    injection_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_injection_df.pkl')
+    save_to_pickle(injection_feature_vectors, injection_feature_vectors_path)
+
+    # create backdoor feature vectors and store
+    backdoor_feature_vectors = dp.pd.DataFrame()
+    for index, tsw_object in tsw_paths[tsw_paths['type'] == 'backdoor'].iterrows():
+        start = dp.time.time()
+        tsw = dp.ThirtySecondWindow(dp.Path(tsw_object['path']))
+        backdoor_local_feature_vectors = create_hostbased_fvs_csv(tsw, valid_columns)
+        backdoor_local_feature_vectors['attack_type'] = tsw_object['type'] # add attack type column for training
+        backdoor_feature_vectors = dp.pd.concat([backdoor_feature_vectors, backdoor_local_feature_vectors])
+        end = dp.time.time()
+        row_count = backdoor_feature_vectors.shape[0]
+        print(f"created backdoorn feature vectors for {tsw_object['type']} in {end - start}s, rows: {row_count}")
+        if row_count >= NR_OF_FVS:
+            break
+        #break
+    backdoor_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_backdoor_df.pkl')
+    save_to_pickle(backdoor_feature_vectors, backdoor_feature_vectors_path)
+
+    # create dos feature vectors and store
+    dos_feature_vectors = dp.pd.DataFrame()
+    for index, tsw_object in tsw_paths[tsw_paths['type'] == 'dos'].iterrows():
+        start = dp.time.time()
+        tsw = dp.ThirtySecondWindow(dp.Path(tsw_object['path']))
+        dos_local_feature_vectors = create_hostbased_fvs_csv(tsw, valid_columns)
+        dos_local_feature_vectors['attack_type'] = tsw_object['type'] # add attack type column for training
+        dos_feature_vectors = dp.pd.concat([dos_feature_vectors, dos_local_feature_vectors])
+        end = dp.time.time()
+        row_count = dos_feature_vectors.shape[0]
+        print(f"created dos feature vectors for {tsw_object['type']} in {end - start}s, rows: {row_count}")
+        if row_count >= NR_OF_FVS:
+            break
+        #break
+    dos_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_dos_df.pkl')
+    save_to_pickle(dos_feature_vectors, dos_feature_vectors_path)
+
 
 # region classifiers -------------------------------------------------------------------------------------------------------------------------------
 
