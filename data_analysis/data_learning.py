@@ -1,6 +1,8 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import GridSearchCV
 from . import data_processing as dp
 # for later: k-fold cross-validation: split data into k subsets, train on k-1, test on 1
 # -> do this k times and evaluate model
