@@ -425,16 +425,18 @@ def get_pca_reduced(df, n_components):
     pca = PCA(n_components=0.9)
     return pd.DataFrame(pca.fit_transform(df))
 
-def getThirtySecondWindowPaths(path : Path):
+def getThirtySecondWindowPaths(data_set_path : Path):
     thirty_second_windows = pd.DataFrame(columns=["path", "type"])
 
-    for entry in os.scandir(path):
-        entry_path = path / entry
+    # get attack tsw paths
+    for entry in os.scandir(data_set_path / 'angriff'):
+        entry_path = data_set_path / entry
 
         #if entry_path.is_dir():
 
         # get type of attack
         entry_lower = entry.name.lower()
+        type = ''
 
         if "_dos" in entry_lower:
             type = "dos"
@@ -451,7 +453,7 @@ def getThirtySecondWindowPaths(path : Path):
         else:
             type = "unknown"
         
-        # get path and create df
+        # get paths and add to df
         for window in os.scandir(entry_path):
             window_path = entry_path / window
 
@@ -460,7 +462,23 @@ def getThirtySecondWindowPaths(path : Path):
                     thirty_second_windows,
                     pd.DataFrame([{"path": str(window_path), "type": type}])
                 ], ignore_index=True)
+    
+    # get normal tsw paths
+    for entry in os.scandir(data_set_path / 'normal'):
+        entry_path = data_set_path / entry
+
+        # get paths and add to df
+        if entry_path.is_dir():
+            for window in os.scandir(entry_path):
+                window_path = entry_path / window
+
+                if window_path.is_dir():
+                    thirty_second_windows = pd.concat([
+                        thirty_second_windows,
+                        pd.DataFrame([{"path": str(window_path), "type": 'normal'}])
+                    ], ignore_index=True)
     thirty_second_windows.reset_index()
+
     return thirty_second_windows
 
 

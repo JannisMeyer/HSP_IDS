@@ -96,9 +96,9 @@ def create_hostbased_fvs_csv(tsw : dp.ThirtySecondWindow, selected_columns : lis
         #break
     return feature_vectors
 
-def create_and_store_fvs(attack_data_set_path : dp.Path, ddos_test_path_parquet : dp.Path):
+def create_and_store_fvs(data_set_path : dp.Path, ddos_test_path_parquet : dp.Path):
     feature_vectors = dp.pd.DataFrame()
-    tsw_paths = dp.getThirtySecondWindowPaths(attack_data_set_path)
+    tsw_paths = dp.getThirtySecondWindowPaths(data_set_path)
     NR_OF_FVS = 100
 
     # create ddos feature vectors
@@ -112,7 +112,7 @@ def create_and_store_fvs(attack_data_set_path : dp.Path, ddos_test_path_parquet 
     test_ddos_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_ddos_df.pkl')
     save_to_pickle(test_ddos_feature_vectors, test_ddos_feature_vectors_path)
 
-    ddos_feature_vectors = dp.pp.load('test_ddos_df.pkl')
+    ddos_feature_vectors = dp.pp.load(dp.Path('/home/hsp252/Development/HSP_IDS/test_ddos_df.pkl'))
     valid_columns = ddos_feature_vectors.columns.to_list()
     ddos_feature_vectors['attack_type'] = 'ddos'
     feature_vectors = dp.pd.concat([feature_vectors, ddos_feature_vectors])
@@ -201,6 +201,23 @@ def create_and_store_fvs(attack_data_set_path : dp.Path, ddos_test_path_parquet 
         #break
     dos_feature_vectors_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_dos_df.pkl')
     save_to_pickle(dos_feature_vectors, dos_feature_vectors_path)
+
+    # create normal feature vectors and store
+    normal_fvs = dp.pd.DataFrame()
+    for index, tsw_object in tsw_paths[tsw_paths['type'] == 'normal'].iterrows():
+        start = dp.time.time()
+        tsw = dp.ThirtySecondWindow(dp.Path(tsw_object['path']))
+        normal_local_fvs = create_hostbased_fvs_csv(tsw, valid_columns)
+        normal_local_fvs['attack_type'] = tsw_object['type'] # add attack type column for training
+        normal_fvs = dp.pd.concat([normal_fvs, normal_local_fvs])
+        end = dp.time.time()
+        row_count = normal_fvs.shape[0]
+        print(f"created normal fv for {tsw_object['type']} in {end - start}s, rows: {row_count}")
+        if row_count >= NR_OF_FVS:
+            break
+        #break
+    normal_fv_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_normal_df.pkl')
+    save_to_pickle(normal_fvs, normal_fv_path)
 
 
 # region classifiers -------------------------------------------------------------------------------------------------------------------------------
