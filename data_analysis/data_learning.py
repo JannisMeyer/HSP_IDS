@@ -104,10 +104,10 @@ def create_and_store_fvs(data_set_path : dp.Path, ddos_test_path_parquet : dp.Pa
     NR_OF_FVS = 100
 
     # create ddos feature vectors
-    selected_cols = dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/connections/1556466432.434372-1556466442.434372/96.0_192.168.1.193_49338.0_192.168.1.152_1880.0/host_data_chunk_full.csv').select_dtypes(include='number').columns.to_list() \
-    + dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/s2_selected_qs.csv').select_dtypes(include='number').columns.to_list() \
-    + dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/s3_connection_qs.csv').select_dtypes(include='number').columns.to_list() \
-    + dp.pd.read_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/s1_general_qs.csv').select_dtypes(include='number').columns.to_list()
+    selected_cols = get_feature_names_from_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/connections/1556466432.434372-1556466442.434372/96.0_192.168.1.193_49338.0_192.168.1.152_1880.0/host_data_chunk_full.csv').select_dtypes(include='number').to_list() \
+    + get_feature_names_from_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/s2_selected_qs.csv').select_dtypes(include='number').to_list() \
+    + get_feature_names_from_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/192.168.1.152/s3_connection_qs.csv').select_dtypes(include='number').to_list() \
+    + get_feature_names_from_csv('/home/hsp252/nas_mount/hunter.ids.data/hunter.ids.preprocessor/processed_dataframes/angriff/2025-02-28_08-41-32_192.168.1.0-normal_backdoor/1556466432.434372-1556466462.434372/s1_general_qs.csv').select_dtypes(include='number').to_list()
 
     test_ddos_feature_vectors = create_hostbased_fvs_parquet(ddos_test_path_parquet, selected_cols)
 
@@ -250,3 +250,6 @@ def rfc(fvs, labels):
 def save_to_pickle(data, path : dp.Path):
     dp.pp.save(path, data, overwrite=True)
     print("saved data")
+
+def get_feature_names_from_csv(path : dp.Path):
+    return dp.pd.read_csv(path).columns
