@@ -225,19 +225,25 @@ def create_and_store_fvs(data_set_path : dp.Path, ddos_test_path_parquet : dp.Pa
 # region classifiers -------------------------------------------------------------------------------------------------------------------------------
 
 # TODO: look at statistics after training, evtl. LSTM oder Transformer
-class RFClassifier:
-    def __init__(self, X, y, n_estimators=100, max_depth=10):
-        self.model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth)
-        self.train_model(X, y)
+def rfc(fvs, labels):
+        le = LabelEncoder()
+        labels = le.fit_transform(labels)
 
-    def train_model(self, X, Y):
-        x_train, x_test, y_train, y_test = train_test_split(X, Y, stratify=Y)
-        self.model.fit(x_train, y_train)
+        x_train, x_test, y_train, y_test = train_test_split(fvs, labels, stratify=labels)
+        rfc = RandomForestClassifier()
 
-        predictions = self.model.predict(x_test)
+        grid = {'n_estimators':[1000],
+                'max_depth':[3, 5, 7, 10, 20, 25],
+                'min_samples_leaf':[1, 2]}
+        gs = GridSearchCV(estimator=rfc, param_grid=grid, scoring='accuracy', cv=3, return_train_score=True)
+        gs.fit(x_train, y_train)
 
-        print(f"accurracy: {accuracy_score(y_test, predictions)}")
-        print(f"importances: {self.model.feature_importances_}")
+        best_rfc = gs.best_estimator_
+        predictions = best_rfc.predict(x_test)
+        accuracy = accuracy_score(y_test, predictions)
+        feature_importances = best_rfc.feature_importances_
+
+        return gs.best_params_, predictions, accuracy, feature_importances
     
 # region auxiliary -------------------------------------------------------------------------------------------------------------------------------
 
