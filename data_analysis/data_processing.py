@@ -15,6 +15,9 @@ from tslearn.datasets import CachedDatasets
 from tslearn.preprocessing import TimeSeriesScalerMeanVariance
 from collections import defaultdict
 import pypickle as pp
+import os
+import pyarrow.parquet as pq
+from pyarrow import float32, float64, bool_
 
 # TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
 # TODO: rebuild data structure and functions
@@ -480,6 +483,22 @@ def getThirtySecondWindowPaths(data_set_path : Path):
     thirty_second_windows.reset_index()
 
     return thirty_second_windows
+
+def read_parquet(path):
+    schema = pq.read_schema(path)
+    all_cols = schema.names
+    all_types = [schema.field(i).type for i in range(len(schema))]
+
+    selected_columns = [
+        col for col, typ in zip(all_cols[7:], all_types[7:]) 
+        if typ in (float32(), float64(), bool_())
+    ]
+
+    df = pd.read_parquet(path, columns=selected_columns)
+    bool_cols = df.select_dtypes(include='bool').columns
+    df[bool_cols] = df[bool_cols].astype(float)
+
+    return df
 
 
 # region auxiliary ----------------------------------------------------------------------------------------------------------------------------

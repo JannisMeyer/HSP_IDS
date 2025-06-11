@@ -98,7 +98,7 @@ def create_hostbased_fvs_csv(tsw : dp.ThirtySecondWindow, selected_columns : lis
         #break
     return feature_vectors
 
-def create_and_store_fvs(data_set_path : dp.Path, ddos_test_path_parquet : dp.Path):
+def create_and_store_host_based_fvs(data_set_path : dp.Path, ddos_test_path_parquet : dp.Path):
     feature_vectors = dp.pd.DataFrame()
     tsw_paths = dp.getThirtySecondWindowPaths(data_set_path)
     NR_OF_FVS = 100
@@ -220,7 +220,7 @@ def create_and_store_fvs(data_set_path : dp.Path, ddos_test_path_parquet : dp.Pa
         #break
     normal_fv_path = dp.Path(r'/home/hsp252/Development/HSP_IDS/test_normal_df.pkl')
     save_to_pickle(normal_fvs, normal_fv_path)
-
+    
 
 # region classifiers -------------------------------------------------------------------------------------------------------------------------------
 
@@ -233,8 +233,10 @@ def rfc(fvs, labels):
         rfc = RandomForestClassifier()
 
         grid = {'n_estimators':[1000],
-                'max_depth':[3, 5, 7, 10, 20, 25],
-                'min_samples_leaf':[1, 2]}
+                'max_depth':[20],
+                # 'max_depth':[3, 5, 7, 10, 20, 25],
+                'min_samples_leaf':[1]}
+                # 'min_samples_leaf':[1, 2]}
         gs = GridSearchCV(estimator=rfc, param_grid=grid, scoring='accuracy', cv=3, return_train_score=True)
         gs.fit(x_train, y_train)
 
