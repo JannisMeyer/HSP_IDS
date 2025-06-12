@@ -18,6 +18,7 @@ import pypickle as pp
 import os
 import pyarrow.parquet as pq
 from pyarrow import float32, float64, bool_
+import pyarrow as pa
 
 # TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
 # TODO: rebuild data structure and functions
@@ -484,7 +485,7 @@ def getThirtySecondWindowPaths(data_set_path : Path):
 
     return thirty_second_windows
 
-def read_parquet(path):
+def read_parquet(path, nr_of_rows = 0):
     schema = pq.read_schema(path)
     all_cols = schema.names
     all_types = [schema.field(i).type for i in range(len(schema))]
@@ -494,7 +495,14 @@ def read_parquet(path):
         if typ in (float32(), float64(), bool_())
     ]
 
-    df = pd.read_parquet(path, columns=selected_columns)
+    pf = pq.ParquetFile(path)
+    df = pd.DataFrame()
+
+    if(nr_of_rows == 0):
+        df = pf.read(columns = selected_columns).to_pandas()
+    else:
+        df = next(pf.iter_batches(batch_size = nr_of_rows, columns=selected_columns))
+        df = pa.Table.from_batches([df]).to_pandas()
     bool_cols = df.select_dtypes(include='bool').columns
     df[bool_cols] = df[bool_cols].astype(float)
 

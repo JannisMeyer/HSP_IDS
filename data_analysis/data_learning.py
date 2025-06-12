@@ -248,7 +248,7 @@ def rfc(fvs, labels):
         accuracy = accuracy_score(y_test, predictions)
         feature_importances = best_rfc.feature_importances_
 
-        return gs.best_params_, predictions, accuracy, feature_importances
+        return best_rfc, gs.best_params_, predictions, accuracy, feature_importances
     
 # region auxiliary -------------------------------------------------------------------------------------------------------------------------------
 
