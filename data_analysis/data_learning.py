@@ -225,19 +225,18 @@ def create_and_store_host_based_fvs(data_set_path : dp.Path, ddos_test_path_parq
 # region classifiers -------------------------------------------------------------------------------------------------------------------------------
 
 # TODO: look at statistics after training, evtl. LSTM oder Transformer
-def rfc(fvs, labels):
-        le = LabelEncoder()
-        labels = le.fit_transform(labels)
+def rfc_classify(fvs, labels):
+        # le = LabelEncoder()
+        # labels = le.fit_transform(labels)
 
-        print('splitting data...')
         x_train, x_test, y_train, y_test = train_test_split(fvs, labels, stratify=labels)
         rfc = RandomForestClassifier(verbose=True, n_jobs=28)
 
-        grid = {'n_estimators':[1000],
-                'max_depth':[20],
-                #'max_depth':[3, 5, 7, 10, 20, 25],
-                'min_samples_leaf':[1]}
-                #'min_samples_leaf':[1, 2]}
+        grid = {'n_estimators':[100, 500, 1000],
+                #'max_depth':[20],
+                'max_depth':[3, 5, 7, 10, 20, 25],
+                #'min_samples_leaf':[1]}
+                'min_samples_leaf':[1, 2]}
         gs = GridSearchCV(estimator=rfc, param_grid=grid, scoring='accuracy', cv=3, return_train_score=True, verbose=True)
         gs.fit(x_train, y_train)
 
@@ -245,7 +244,6 @@ def rfc(fvs, labels):
         predictions = best_rfc.predict(x_test)
         accuracy = accuracy_score(y_test, predictions)
         feature_importances = best_rfc.feature_importances_
-        print(classification_report(y_test, predictions))
 
         return best_rfc, gs.best_params_, predictions, accuracy, feature_importances
     
