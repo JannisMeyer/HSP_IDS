@@ -1,6 +1,6 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import GridSearchCV
 from . import data_processing as dp
@@ -225,19 +225,19 @@ def create_and_store_host_based_fvs(data_set_path : dp.Path, ddos_test_path_parq
 # region classifiers -------------------------------------------------------------------------------------------------------------------------------
 
 # TODO: look at statistics after training, evtl. LSTM oder Transformer
-def rfc_classify(fvs, labels):
+def rfc_train_test(fvs, labels):
         # le = LabelEncoder()
         # labels = le.fit_transform(labels)
 
         x_train, x_test, y_train, y_test = train_test_split(fvs, labels, stratify=labels)
-        rfc = RandomForestClassifier(verbose=True, n_jobs=28)
+        rfc = RandomForestClassifier(verbose=False, n_jobs=28)
 
         grid = {'n_estimators':[100, 500, 1000],
                 #'max_depth':[20],
                 'max_depth':[3, 5, 7, 10, 20, 25],
                 #'min_samples_leaf':[1]}
                 'min_samples_leaf':[1, 2]}
-        gs = GridSearchCV(estimator=rfc, param_grid=grid, scoring='accuracy', cv=3, return_train_score=True, verbose=True)
+        gs = GridSearchCV(estimator=rfc, param_grid=grid, scoring='accuracy', cv=3, return_train_score=True, verbose=False)
         gs.fit(x_train, y_train)
 
         best_rfc = gs.best_estimator_

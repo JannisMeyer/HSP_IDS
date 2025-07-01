@@ -19,6 +19,7 @@ import os
 import pyarrow.parquet as pq
 from pyarrow import float32, float64, bool_
 import pyarrow as pa
+import gc
 
 # TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
 # TODO: rebuild data structure and functions
@@ -485,15 +486,16 @@ def getThirtySecondWindowPaths(data_set_path : Path):
 
     return thirty_second_windows
 
-def read_parquet(path, nr_of_rows = 0):
+def read_parquet(path, nr_of_rows = 0, selected_columns = []):
     schema = pq.read_schema(path)
     all_cols = schema.names
     all_types = [schema.field(i).type for i in range(len(schema))]
 
-    selected_columns = [
-        col for col, typ in zip(all_cols[7:], all_types[7:]) 
-        if typ in (float32(), float64(), bool_())
-    ]
+    if not selected_columns:
+        selected_columns = [
+            col for col, typ in zip(all_cols[7:], all_types[7:]) 
+            if typ in (float32(), float64(), bool_())
+        ]
 
     pf = pq.ParquetFile(path)
     df = pd.DataFrame()
@@ -508,6 +510,30 @@ def read_parquet(path, nr_of_rows = 0):
 
     return df
 
+def get_fvs_from_parquet(parquet_paths : List,
+                         NR_ELEMENTS,
+                         attack_types : List,
+                         sample_balancing : bool,
+                         all_samples : bool):
+    fvs = pd.DataFrame()
+    labels = pd.DataFrame()
+
+    for i, attack_type in enumerate(parquet_paths):
+        for entry in os.listdir(attack_type):
+            entry_path = Path(attack_type) / entry
+
+            if sample_balancing:
+                fvs_local = read_parquet(entry_path, NR_ELEMENTS)
+            else:
+                fvs_local = read_parquet(entry_path, 0) # 0 means read all rows
+            fvs = pd.concat([fvs, fvs_local])
+            labels = pd.concat([labels, pd.DataFrame({'attack_type': [attack_types[i]] * fvs_local.shape[0]})])
+            del fvs_local
+            gc.collect()
+
+            if not all_samples: # acquire only one file from every attack type
+                break
+    return fvs, labels
 
 # region auxiliary ----------------------------------------------------------------------------------------------------------------------------
 
