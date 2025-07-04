@@ -20,6 +20,8 @@ import pyarrow.parquet as pq
 from pyarrow import float32, float64, bool_
 import pyarrow as pa
 import gc
+import dask.dataframe as dd
+import duckdb as ddb
 
 # TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
 # TODO: rebuild data structure and functions
@@ -513,26 +515,29 @@ def read_parquet(path, nr_of_rows = 0, selected_columns = []):
 def get_fvs_from_parquet(parquet_paths : List,
                          NR_ELEMENTS,
                          attack_types : List,
-                         sample_balancing : bool,
-                         all_samples : bool):
+                         all_samples : bool,
+                         columns : List = []):
     fvs = pd.DataFrame()
     labels = pd.DataFrame()
 
+    # create columns string for SQL SELECT
+    if columns:
+        columns = ", ".join(columns)
+    else:
+        columns = "*"
+
     for i, attack_type in enumerate(parquet_paths):
-        for entry in os.listdir(attack_type):
-            entry_path = Path(attack_type) / entry
-
-            if sample_balancing:
-                fvs_local = read_parquet(entry_path, NR_ELEMENTS)
-            else:
-                fvs_local = read_parquet(entry_path, 0) # 0 means read all rows
-            fvs = pd.concat([fvs, fvs_local])
+        if all_samples:
+            fvs_local = ddb.query(f"""SELECT '{columns}' FROM '{attack_type}/*.parquet'""").to_df()
             labels = pd.concat([labels, pd.DataFrame({'attack_type': [attack_types[i]] * fvs_local.shape[0]})])
-            del fvs_local
-            gc.collect()
-
-            if not all_samples: # acquire only one file from every attack type
-                break
+            #print(f"{attack_types[i]}: {fvs_local.shape}")
+        else:
+            fvs_local = ddb.query(f"""
+                        SELECT '{columns}' FROM '{attack_type}/*.parquet'
+                        USING SAMPLE {NR_ELEMENTS} ROWS
+                    """).to_df()
+            labels = pd.concat([labels, pd.DataFrame({'attack_type': [attack_types[i]] * fvs_local.shape[0]})])
+            #print(f"{attack_types[i]}: {fvs_local.shape}")
     return fvs, labels
 
 # region auxiliary ----------------------------------------------------------------------------------------------------------------------------
