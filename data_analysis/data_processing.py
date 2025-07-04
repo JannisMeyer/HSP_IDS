@@ -521,23 +521,38 @@ def get_fvs_from_parquet(parquet_paths : List,
     labels = pd.DataFrame()
 
     # create columns string for SQL SELECT
-    if columns:
-        columns = ", ".join(columns)
-    else:
-        columns = "*"
+    schema = pq.read_schema('/home/hsp252/Development/DDoS/intrusion_normal_DDoS_1_final.parquet')
+    all_cols = schema.names
+    all_types = [schema.field(i).type for i in range(len(schema))]
 
-    for i, attack_type in enumerate(parquet_paths):
+    if not columns:
+        columns = [
+            col for col, type in zip(all_cols[7:], all_types[7:]) 
+            if type in (float32(), float64(), bool_())
+        ]
+    columns = [f'"{col}"' for col in columns]
+    columns = ", ".join(columns)
+
+    # iterate over directories and query with SQL
+    for i, attack_type in enumerate(parquet_paths): 
         if all_samples:
-            fvs_local = ddb.query(f"""SELECT '{columns}' FROM '{attack_type}/*.parquet'""").to_df()
+            fvs_local = ddb.query(f"""SELECT {columns} FROM '{attack_type}/*.parquet'""").to_df()
+            fvs = pd.concat([fvs, fvs_local])
             labels = pd.concat([labels, pd.DataFrame({'attack_type': [attack_types[i]] * fvs_local.shape[0]})])
             #print(f"{attack_types[i]}: {fvs_local.shape}")
         else:
             fvs_local = ddb.query(f"""
-                        SELECT '{columns}' FROM '{attack_type}/*.parquet'
+                        SELECT {columns} FROM '{attack_type}/*.parquet'
                         USING SAMPLE {NR_ELEMENTS} ROWS
                     """).to_df()
+            fvs = pd.concat([fvs, fvs_local])
             labels = pd.concat([labels, pd.DataFrame({'attack_type': [attack_types[i]] * fvs_local.shape[0]})])
             #print(f"{attack_types[i]}: {fvs_local.shape}")
+    
+    # convert bool to float
+    bool_cols = fvs.select_dtypes(include='bool').columns
+    fvs[bool_cols] = fvs[bool_cols].astype(float)
+
     return fvs, labels
 
 # region auxiliary ----------------------------------------------------------------------------------------------------------------------------
