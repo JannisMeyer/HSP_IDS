@@ -615,3 +615,16 @@ def average_features(thirtySecondWindow : ThirtySecondWindow):
 
     return global_df # return series so that df.fillna(global_df) works correctly
 
+def get_parquet_row_nr(path : Path):
+    if os.path.isdir(path):
+        nr_rows = 0
+
+        for file in os.scandir(path):
+            file_path = Path(path) / file
+            nr_rows = nr_rows + pq.ParquetFile(file_path).metadata.num_rows
+        return nr_rows
+    elif os.path.isfile(path):
+        return pq.ParquetFile(path).metadata.num_rows
+    else:
+        raise Exception(f"\'{path}\' is not a directory nor a file or could not be found!")
+
