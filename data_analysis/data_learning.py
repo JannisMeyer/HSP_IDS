@@ -1,6 +1,6 @@
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, IsolationForest
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, make_scorer
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import GridSearchCV
 from . import data_processing as dp
@@ -225,10 +225,7 @@ def create_and_store_host_based_fvs(data_set_path : dp.Path, ddos_test_path_parq
 # region classifiers -------------------------------------------------------------------------------------------------------------------------------
 
 # TODO: look at statistics after training, evtl. LSTM oder Transformer
-def rfc_train_test(fvs, labels):
-        # le = LabelEncoder()
-        # labels = le.fit_transform(labels)
-
+def rfc(fvs, labels):
         x_train, x_test, y_train, y_test = train_test_split(fvs, labels, stratify=labels)
         rfc = RandomForestClassifier(verbose=False, n_jobs=28)
 
@@ -237,7 +234,12 @@ def rfc_train_test(fvs, labels):
                 'max_depth':[3, 5, 7, 10, 20, 25],
                 #'min_samples_leaf':[1]}
                 'min_samples_leaf':[1, 2]}
-        gs = GridSearchCV(estimator=rfc, param_grid=grid, scoring='accuracy', cv=3, return_train_score=True, verbose=False)
+        gs = GridSearchCV(estimator=rfc,
+                          param_grid=grid,
+                          scoring='accuracy',
+                          cv=3,
+                          return_train_score=True,
+                          verbose=False)
         gs.fit(x_train, y_train)
 
         best_rfc = gs.best_estimator_
@@ -246,6 +248,50 @@ def rfc_train_test(fvs, labels):
         feature_importances = best_rfc.feature_importances_
 
         return best_rfc, gs.best_params_, predictions, accuracy, feature_importances
+
+def i_forest(fvs, labels):
+
+    # TODO: transform labels to -1,1 here before usage
+    # use GridSearch for Hyperparameter Tuning (n_estimators, max_samples, max_features)
+    # for contamination: set to auto, train, test on various data sets and look at decision function values
+    # use multiple processors
+    # save IsolationForest as pkl-file
+
+    # def f1_scorer(y, y_pred):
+
+    #     # transform to array of either -1 (attack) or 1 (normal) to fit to Isolation Forest prediciton output
+    #     y = [-1 if x != 'normal' else 1 for x in y]
+    #     y_pred = [-1 if x != 'normal' else 1 for x in y_pred]
+
+    #     print(len(y))
+    #     print(len(y_pred))
+
+    #     return f1_score(y, y_pred)
+    def f1_scorer(estimator, X, y_true, **kwargs):
+        y_true = [-1 if x != 'normal' else 1 for x in y_true]
+        y_pred = estimator.predict(X)
+        # convert to 0/1 labels
+        y_pred = (y_pred == -1).astype(int)
+        y_true = (y_true == -1).astype(int)
+        return f1_score(y_true, y_pred)
+
+    i_forest = IsolationForest(verbose=False, n_jobs=28)
+
+    grid = {'n_estimators':[50, 100, 500],
+            #'max_samples':[256],
+            'max_samples':[50, 256, 1000],
+            #'max_features':[0.1]}
+            'max_features':[0.05, 0.1, 0.5]}
+    gs = GridSearchCV(estimator=i_forest,
+                      param_grid=grid,
+                      scoring=make_scorer(f1_scorer),
+                      cv=3,
+                      return_train_score=True, verbose=False)
+    gs.fit(fvs, labels)
+
+    best_i_forest = gs.best_estimator_
+
+    return best_i_forest, gs.best_params_
     
 # region auxiliary -------------------------------------------------------------------------------------------------------------------------------
 
