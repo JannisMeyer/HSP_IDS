@@ -513,10 +513,10 @@ def read_parquet(path, nr_of_rows = 0, selected_columns = []):
     return df
 
 def get_fvs_from_parquet(parquet_paths : List,
-                         NR_ELEMENTS,
                          attack_types : List,
                          all_samples : bool,
-                         columns : List = []):
+                         columns : List = [],
+                         NR_ELEMENTS = 1):
     fvs = pd.DataFrame()
     labels = pd.DataFrame()
 
@@ -539,7 +539,6 @@ def get_fvs_from_parquet(parquet_paths : List,
             fvs_local = ddb.query(f"""SELECT {columns} FROM '{attack_type}/*.parquet'""").to_df()
             fvs = pd.concat([fvs, fvs_local])
             labels = pd.concat([labels, pd.DataFrame({'attack_type': [attack_types[i]] * fvs_local.shape[0]})])
-            #print(f"{attack_types[i]}: {fvs_local.shape}")
         else:
             fvs_local = ddb.query(f"""
                         SELECT {columns} FROM '{attack_type}/*.parquet'
