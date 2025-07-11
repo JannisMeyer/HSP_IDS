@@ -240,7 +240,11 @@ def rfc(fvs, labels):
                           cv=3,
                           return_train_score=True,
                           verbose=False)
+<<<<<<< HEAD
         gs.fit(x_train, y_train.values.ravel())
+=======
+        gs.fit(x_train, y_train)
+>>>>>>> d1ec19132303e12f72f92cbb6e706af20c385c22
 
         best_rfc = gs.best_estimator_
         predictions = best_rfc.predict(x_test)
