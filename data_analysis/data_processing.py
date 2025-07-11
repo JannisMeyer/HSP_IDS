@@ -332,6 +332,33 @@ def time_series_kmeans(thirty_second_window : ThirtySecondWindow, n_clusters : i
         else:
             print("Not enough connections to compute clustering, skipping!")
             #break
+    
+def plot_feature_importances(important_features : list,
+                             important_features_values : list,
+                             s1_features : list,
+                             s2_features : list,
+                             s3_features : list,
+                             connection_features : list):
+        s1_mask = [i for i, feature in enumerate(important_features) if feature in s1_features]
+        s2_mask = [i for i, feature in enumerate(important_features) if feature in s2_features]
+        s3_mask = [i for i, feature in enumerate(important_features) if feature in s3_features]
+        connection_mask = [i for i, feature in enumerate(important_features) if feature in connection_features]
+
+        plt.figure(figsize=(12, 6))
+
+        if s1_mask:
+                plt.barh(important_features[s1_mask], important_features_values[s1_mask], color = 'red', label='s1')
+        if s2_mask:
+                plt.barh(important_features[s2_mask], important_features_values[s2_mask], color = 'blue', label='s2')
+        if s3_mask:
+                plt.barh(important_features[s3_mask], important_features_values[s3_mask], color = 'green', label='s3')
+        if connection_mask:
+                plt.barh(important_features[connection_mask], important_features_values[connection_mask], color = 'orange', label='connection')
+        plt.xlabel("Importance")
+        plt.title("Top 20 Most Important Features")
+        plt.tight_layout()
+        plt.legend()
+        plt.show()
 
 
 # region data acquiring -----------------------------------------------------------------------------------------------------------------------
@@ -512,10 +539,10 @@ def read_parquet(path, nr_of_rows = 0, selected_columns = []):
 
     return df
 
-def get_fvs_from_parquet(parquet_paths : List,
-                         NR_ELEMENTS,
-                         attack_types : List,
-                         all_samples : bool,
+def get_fvs_from_parquet(parquet_paths : List = [],
+                         attack_types : List = [],
+                         NR_ELEMENTS = 1,
+                         all_samples : bool = False,
                          columns : List = []):
     fvs = pd.DataFrame()
     labels = pd.DataFrame()
@@ -539,7 +566,6 @@ def get_fvs_from_parquet(parquet_paths : List,
             fvs_local = ddb.query(f"""SELECT {columns} FROM '{attack_type}/*.parquet'""").to_df()
             fvs = pd.concat([fvs, fvs_local])
             labels = pd.concat([labels, pd.DataFrame({'attack_type': [attack_types[i]] * fvs_local.shape[0]})])
-            #print(f"{attack_types[i]}: {fvs_local.shape}")
         else:
             fvs_local = ddb.query(f"""
                         SELECT {columns} FROM '{attack_type}/*.parquet'
@@ -614,4 +640,17 @@ def average_features(thirtySecondWindow : ThirtySecondWindow):
     global_df = global_df.fillna(0)
 
     return global_df # return series so that df.fillna(global_df) works correctly
+
+def get_parquet_row_nr(path : Path):
+    if os.path.isdir(path):
+        nr_rows = 0
+
+        for file in os.scandir(path):
+            file_path = Path(path) / file
+            nr_rows = nr_rows + pq.ParquetFile(file_path).metadata.num_rows
+        return nr_rows
+    elif os.path.isfile(path):
+        return pq.ParquetFile(path).metadata.num_rows
+    else:
+        raise Exception(f"\'{path}\' is not a directory nor a file or could not be found!")
 
