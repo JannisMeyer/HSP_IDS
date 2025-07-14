@@ -335,10 +335,10 @@ def time_series_kmeans(thirty_second_window : ThirtySecondWindow, n_clusters : i
     
 def plot_feature_importances(important_features : list,
                              important_features_values : list,
-                             s1_features : list,
-                             s2_features : list,
-                             s3_features : list,
-                             connection_features : list):
+                             s1_features : list = [],
+                             s2_features : list = [],
+                             s3_features : list = [],
+                             connection_features : list = []):
         s1_mask = [i for i, feature in enumerate(important_features) if feature in s1_features]
         s2_mask = [i for i, feature in enumerate(important_features) if feature in s2_features]
         s3_mask = [i for i, feature in enumerate(important_features) if feature in s3_features]
