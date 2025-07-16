@@ -4,6 +4,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import GridSearchCV
 from . import data_processing as dp
+from . import initial_data as i
 # for later: k-fold cross-validation: split data into k subsets, train on k-1, test on 1
 # -> do this k times and evaluate model
 # Grid Search for hyperparameter tuning or Optuna
@@ -292,6 +293,30 @@ def i_forest(fvs, labels):
     best_i_forest = gs.best_estimator_
 
     return best_i_forest, gs.best_params_
+
+def train_test_rfc(features, nr_training_samples, nr_test_samples):
+
+        # train on passed features
+        train_fvs, train_labels = dp.get_fvs_from_parquet(parquet_paths=i.parquet_paths,
+                                                        NR_ELEMENTS=nr_training_samples,
+                                                        attack_types=i.attack_types,
+                                                        all_samples=False)
+
+        train_fvs = train_fvs[features]
+
+        best_rfc, best_params_before, predictions, train_accuracy, feature_importances = rfc(train_fvs, train_labels)
+
+        # test on passed features
+        test_fvs, test_labels = dp.get_fvs_from_parquet(parquet_paths=i.parquet_paths,
+                                                                NR_ELEMENTS=nr_test_samples,
+                                                                attack_types=i.attack_types,
+                                                                all_samples=False)
+        test_fvs = test_fvs[features]
+
+        test_predictions = best_rfc.predict(test_fvs)
+        test_accuracy = accuracy_score(test_labels, test_predictions)
+
+        return train_accuracy, test_accuracy
     
 # region auxiliary -------------------------------------------------------------------------------------------------------------------------------
 

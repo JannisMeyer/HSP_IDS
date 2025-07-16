@@ -339,26 +339,26 @@ def plot_feature_importances(important_features : list,
                              s2_features : list = [],
                              s3_features : list = [],
                              connection_features : list = []):
-        s1_mask = [i for i, feature in enumerate(important_features) if feature in s1_features]
-        s2_mask = [i for i, feature in enumerate(important_features) if feature in s2_features]
-        s3_mask = [i for i, feature in enumerate(important_features) if feature in s3_features]
-        connection_mask = [i for i, feature in enumerate(important_features) if feature in connection_features]
+    s1_mask = [i for i, feature in enumerate(important_features) if feature in s1_features]
+    s2_mask = [i for i, feature in enumerate(important_features) if feature in s2_features]
+    s3_mask = [i for i, feature in enumerate(important_features) if feature in s3_features]
+    connection_mask = [i for i, feature in enumerate(important_features) if feature in connection_features]
 
-        plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(12, 6))
 
-        if s1_mask:
-                plt.barh(important_features[s1_mask], important_features_values[s1_mask], color = 'red', label='s1')
-        if s2_mask:
-                plt.barh(important_features[s2_mask], important_features_values[s2_mask], color = 'blue', label='s2')
-        if s3_mask:
-                plt.barh(important_features[s3_mask], important_features_values[s3_mask], color = 'green', label='s3')
-        if connection_mask:
-                plt.barh(important_features[connection_mask], important_features_values[connection_mask], color = 'orange', label='connection')
-        plt.xlabel("Importance")
-        plt.title("Top 20 Most Important Features")
-        plt.tight_layout()
-        plt.legend()
-        plt.show()
+    if s1_mask:
+            plt.barh(important_features[s1_mask], important_features_values[s1_mask], color = 'red', label='s1')
+    if s2_mask:
+            plt.barh(important_features[s2_mask], important_features_values[s2_mask], color = 'blue', label='s2')
+    if s3_mask:
+            plt.barh(important_features[s3_mask], important_features_values[s3_mask], color = 'green', label='s3')
+    if connection_mask:
+            plt.barh(important_features[connection_mask], important_features_values[connection_mask], color = 'orange', label='connection')
+    plt.xlabel("Importance")
+    plt.title("Top 20 Most Important Features")
+    plt.tight_layout()
+    plt.legend()
+    plt.show()
 
 
 # region data acquiring -----------------------------------------------------------------------------------------------------------------------
