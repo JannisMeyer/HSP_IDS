@@ -22,6 +22,7 @@ import pyarrow as pa
 import gc
 import dask.dataframe as dd
 import duckdb as ddb
+from . import initial_data as i
 
 # TODO: Feature-Reduktion (Clustering) für einzelne Verbindungen
 # TODO: rebuild data structure and functions
@@ -124,84 +125,45 @@ class ThirtySecondWindow:
 # region data plotting -----------------------------------------------------------------------------------------------------------------------
 USEFUL_FEATURES_START = 'conn_duration'
 
-# TODO: adapt to actual data structure (collect time series of connections over 10s windows and do correlation)
-def plot_correlation(thirty_sec_window : ThirtySecondWindow, plot_dendrogram : bool):
+def plot_correlation(plot_dendrogram : bool):
 
-    for host_index, host in enumerate(thirty_sec_window.hosts):
-        print(f"\n----- Host {host_index + 1} -----")
+    # build df with samples from every class and compute correlation matrix
+    df, unused = get_fvs_from_parquet(i.parquet_paths,
+                                i.attack_types,
+                                i.NR_MIN_ELEMENTS_IN_ALL_FILES,
+                                False)
+    # pd.set_option('display.max_rows', None)
+    # print(df.isna().mean().sort_values(ascending=False) * 100)
+    # print(f"Column with highest percentage of NAs: f{df.isna().sum().idxmax()},\
+    #       {(df.isna().sum().max()) / (df.shape[0])}")
+    # print(f"Percentage of NAs in df: {(df.isna().sum().sum()) / (df.shape[0] * df.shape[1])}")
+    corr_matrix = df.corr().fillna(0)
+    np.fill_diagonal(corr_matrix.values, 1)
+    #print(f"Percentage of Nans in corr matrix: {(corr_matrix.isna().sum().sum()) / (corr_matrix.shape[0] * corr_matrix.shape[1])}")
 
-        all_cors = []
-        
-        for ten_second_window in host.ten_second_windows:
-            feature_series = {}
+    # create plot
+    if plot_dendrogram:
 
-            if ten_second_window.connections.__len__() > 1:
-                for connection in ten_second_window.connections:
-                    
-                    # on first run, determine which columns to use
-                    if not feature_series:
-                        all_columns = list(connection.data.columns)
-                        start_index = all_columns.index(USEFUL_FEATURES_START)
-                        useful_features = all_columns[start_index:]
-                        feature_series = {feature: [] for feature in useful_features}
-                    
-                    # get values of features
-                    for feature in feature_series:
-                        value = connection.data[feature][0]
-                        value = float(value) # cast to float for consistency (bools)
-                        feature_series[feature].append(value)
+        # compute hierarchical clusters
+        distance_matrix = 1.0 - corr_matrix
+        distance_matrix = np.clip(distance_matrix, a_min=0, a_max=100) # clip negative values
+        condensed_distance_vector = squareform(distance_matrix.values)
+        Z = linkage(condensed_distance_vector, method='average') # performs hierarchical clustering
 
-                # build DataFrame from collected features
-                df = pd.DataFrame(feature_series)
-                corr = df.corr(method='pearson')
-                all_cors.append(corr)
-            else:
-                print("Not enough 10s-Windows to compute correlation, skipping!")
+        # plot dendrogram
+        plt.figure(figsize=(20, 10))
+        dendrogram(Z, labels=corr_matrix.columns.tolist(), leaf_rotation=90)
+        plt.title("Feature Clustering Dendrogram")
+        plt.show()
 
-        # stack into 3D array
-        if all_cors.__len__() > 0:
-            stacked = np.stack([corr.values for corr in all_cors])
+    else:
 
-            # compute the mean and variance over the z-axis
-            mean_corr_matrix = np.mean(stacked, axis=0)
-            #var_matrix = np.var(stacked, axis=0)
-
-            # retrieve labels
-            features = all_cors[0].columns
-
-            # wrap back into DataFrames
-            mean_corr_df = pd.DataFrame(mean_corr_matrix, index=features, columns=features)
-            #var_df = pd.DataFrame(var_matrix, index=features, columns=features)
-
-            # create plot
-            mean_corr_df_na_dropped = mean_corr_df.corr().dropna(how="all").dropna(axis=1, how="all")
-
-            if plot_dendrogram:
-
-                # compute hierarchical clusters
-                distance_matrix = 1 - mean_corr_df_na_dropped
-                distance_matrix = np.clip(distance_matrix, a_min=0, a_max=100) # clip negative values
-                condensed_distance_vector = squareform(distance_matrix.values)
-                Z = linkage(condensed_distance_vector, method='average') # performs hierarchical clustering
-
-                # plot dendrogram
-                plt.figure(figsize=(10, 5))
-                dendrogram(Z, labels=mean_corr_df_na_dropped.columns.tolist(), leaf_rotation=90)
-                plt.title("Feature Clustering Dendrogram")
-                plt.show()
-
-            else:
-
-                # plot heat map
-                plt.figure(figsize=(20, 20))
-                sns.heatmap(mean_corr_df_na_dropped, annot=False, fmt=".2f", cmap="coolwarm", center=0)
-                plt.title("Feature Correlation Heatmap")
-                plt.tight_layout()
-                plt.show()
-        else:
-            print(f"No correlation data for host {host_index + 1}!")
-
-        #break
+        # plot heat map
+        plt.figure(figsize=(40, 40))
+        sns.heatmap(corr_matrix, annot=False, fmt=".2f", cmap="coolwarm", center=0)
+        plt.title("Feature Correlation Heatmap")
+        plt.tight_layout()
+        plt.show()
 
 # TODO: adapt to actual data structure (collect time series of connections over 10s windows and do kmeans)
 def connection_kmeans(thirty_second_window : ThirtySecondWindow, n_clusters : int = 3):
