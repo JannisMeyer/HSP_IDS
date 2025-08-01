@@ -1,7 +1,6 @@
 from sklearn.ensemble import RandomForestClassifier, IsolationForest
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, make_scorer
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, f1_score, make_scorer
 from sklearn.model_selection import GridSearchCV
 from . import data_processing as dp
 from . import initial_data as i
@@ -111,6 +110,3 @@ def train_test_rfc(features, nr_training_samples, nr_test_samples):
 def save_to_pickle(data, path : dp.Path):
     dp.pp.save(path, data, overwrite=True)
     print("saved data")
-
-def get_feature_names_from_csv(path : dp.Path):
-    return dp.pd.read_csv(path).columns
